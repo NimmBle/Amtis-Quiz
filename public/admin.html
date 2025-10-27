@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html>
   <body>
     <h2>Admin Dashboard</h2>
@@ -29,10 +29,12 @@
       <div style="display:flex; gap:24px; align-items:flex-start;">
         <div id="questionsPanel" style="flex:2;">
           <h3>Questions</h3>
+          <div style='margin: 6px 0 10px 0;'><label>Max hints per team: <input id='maxHintsInput' type='number' min='0' step='1' style='width:80px;' /></label> <button id='saveMaxHintsBtn' style='margin-left:6px;'>Save</button> <span id='maxHintsMsg' style='margin-left:8px;color:#555'></span></div>
           <ol id="questionsList"></ol>
           <div style="margin-top:8px;">
             <input id="qImage" placeholder="Image URL" style="width:40%;" />
-            <input id="qText" placeholder="Question text" style="width:40%; margin-left:6px;" />
+            <input id="qText" placeholder="Question text" style="width:28%; margin-left:6px;" />
+            <input id="qHint" placeholder="Hint (required)" style="width:28%; margin-left:6px;" />
             <button id="addQBtn" style="margin-left:6px;">Add</button>
           </div>
         </div>
@@ -58,10 +60,14 @@
       const teamsTableBody = document.getElementById('teamsTableBody');
       const qImage = document.getElementById('qImage');
       const qText = document.getElementById('qText');
+      const qHint = document.getElementById('qHint');
+      const maxHintsInput = document.getElementById('maxHintsInput');
+      const saveMaxHintsBtn = document.getElementById('saveMaxHintsBtn');
+      const maxHintsMsg = document.getElementById('maxHintsMsg');
       const addQBtn = document.getElementById('addQBtn');
       const questionsList = document.getElementById('questionsList');
 
-      let state = { teams: [], questions: [], answers: [], game: null };
+      let state = { teams: [], questions: [], answers: [], game: null, max_hints: 3 };
 
       function renderGame() {
         const g = state.game || { started: 0, ended: 0 };
@@ -108,7 +114,7 @@
               td.textContent = ans;
             } else {
               // show progress marker if not yet answered
-              td.textContent = (t.current_question === q.position) ? '→' : '';
+              td.textContent = (t.current_question === q.position) ? 'â†’' : '';
             }
             tr.appendChild(td);
           });
@@ -131,6 +137,9 @@
           img.textContent = q.image_url ? `[img] ` : '';
           const text = document.createElement('span');
           text.textContent = q.text || '(no text)';
+          const hintSpan = document.createElement('div');
+          hintSpan.textContent = q.hint ? `Hint: ${q.hint}` : 'Hint: (missing)';
+          hintSpan.style.color = q.hint ? '#555' : '#b00';
           const upBtn = document.createElement('button');
           upBtn.textContent = 'Up';
           upBtn.style.marginLeft = '8px';
@@ -152,6 +161,7 @@
           line.appendChild(downBtn);
           line.appendChild(removeBtn);
           li.appendChild(line);
+          li.appendChild(hintSpan);
           if (q.image_url) {
             const preview = document.createElement('img');
             preview.src = q.image_url;
@@ -184,9 +194,12 @@
       addQBtn.onclick = () => {
         const image_url = qImage.value.trim();
         const text = qText.value.trim();
-        socket.emit('admin_add_question', { image_url, text });
+        const hint = qHint.value.trim();
+        if (!hint) { alert('Hint is required'); return; }
+        socket.emit('admin_add_question', { image_url, text, hint });
         qImage.value = '';
         qText.value = '';
+        qHint.value = '';
       };
 
       socket.on('admin_logged_in', () => {
@@ -196,6 +209,10 @@
 
       socket.on('admin_state', (payload) => {
         state = payload;
+        if (typeof state.max_hints === 'number' && !Number.isNaN(state.max_hints)) {
+          maxHintsInput.value = String(state.max_hints);
+          maxHintsMsg.textContent = '';
+        }
         renderAll();
       });
 
@@ -204,7 +221,13 @@
         renderTeams();
       });
 
-      socket.on('questions_update', (questions) => {
+            saveMaxHintsBtn.onclick = () => {
+        const n = parseInt(maxHintsInput.value, 10);
+        if (!Number.isFinite(n) || n < 0) { maxHintsMsg.textContent = 'Enter a non-negative number'; return; }
+        maxHintsMsg.textContent = 'Saving...';
+        socket.emit('admin_set_max_hints', n);
+        setTimeout(() => { maxHintsMsg.textContent = 'Saved'; }, 300);
+      };socket.on('questions_update', (questions) => {
         state.questions = questions;
         renderQuestions();
       });
@@ -232,3 +255,8 @@
     </script>
   </body>
   </html>
+
+
+
+
+

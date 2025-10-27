@@ -33,10 +33,15 @@
         <div id="questionView">
           <img id="qImageEl" alt="question" style="max-width: 260px; display:none;" />
           <p id="qTextEl"></p>
+          <p id="qHintEl" style="display:none; color:#555;"></p>
         </div>
         <div>
           <input id="answerInput" placeholder="Your answer" />
           <button id="submitAnswerBtn">Submit</button>
+        </div>
+        <div id="hintControls" style="margin-top:8px;">
+          <span>Hints left: <strong id="hintsLeft">0</strong></span>
+          <button id="getHintBtn" style="margin-left:8px;">Get Hint</button>
         </div>
         <div id="finishedNotice" style="display:none; margin-top:8px; color:#0a0;">
           Good job! You have completed all questions. Waiting for other teams to finish.
@@ -57,8 +62,12 @@
       const gameSection = document.getElementById("gameSection");
       const qImageEl = document.getElementById("qImageEl");
       const qTextEl = document.getElementById("qTextEl");
+      const qHintEl = document.getElementById("qHintEl");
       const answerInput = document.getElementById("answerInput");
       const submitAnswerBtn = document.getElementById("submitAnswerBtn");
+      const hintControls = document.getElementById('hintControls');
+      const hintsLeftEl = document.getElementById('hintsLeft');
+      const getHintBtn = document.getElementById('getHintBtn');
       const welcomeHeader = document.getElementById("welcomeHeader");
       const finishedNotice = document.getElementById("finishedNotice");
       let isCreator = false;
@@ -110,6 +119,7 @@
       let lastTeams = [];
       let lastQuestions = [];
       let lastGame = null;
+      let lastHints = { used: 0, left: 0, max: 0, hintedQuestionIds: [] };
 
       function renderQuestion() {
         if (!lastGame || !lastGame.started) {
@@ -133,6 +143,16 @@
         qTextEl.textContent = q.text || '';
         gameSection.style.display = 'block';
         finishedNotice.style.display = 'none';
+        // show hint if already taken for this question
+        if (lastHints.hintedQuestionIds && lastHints.hintedQuestionIds.includes(q.id)) {
+          qHintEl.style.display = 'block';
+          qHintEl.textContent = `Hint: ${q.hint || ''}`;
+        } else {
+          qHintEl.style.display = 'none';
+          qHintEl.textContent = '';
+        }
+        // refresh hints state when showing a question
+        socket.emit('player_get_hints_state');
       }
       socket.on("teams_update", (teams) => {
         const list = document.getElementById("teamsList");
@@ -222,11 +242,43 @@
         answerInput.value = '';
       };
 
+      // Hints: request and update
+      getHintBtn.onclick = () => {
+        socket.emit('request_hint');
+      };
+
+      socket.on('hints_state', (stateHints) => {
+        lastHints = stateHints || { used: 0, left: 0, max: 0, hintedQuestionIds: [] };
+        const left = (lastHints && typeof lastHints.left === 'number') ? lastHints.left : 0;
+        hintsLeftEl.textContent = String(left);
+        // hide hint button for non-captains; show for captains with hints left
+        hintControls.style.display = isCreator ? '' : 'none';
+        getHintBtn.disabled = left <= 0 || !isCreator;
+        // re-render question hint visibility in case state changed
+        renderQuestion();
+      });
+
+      socket.on('hint_revealed', (payload) => {
+        // Only care if it's our team
+        const playerName = playerNameSpan.textContent;
+        const currentTeam = lastTeams.find(t => t.players.includes(playerName));
+        if (!currentTeam || !payload || payload.teamId !== currentTeam.id) return;
+        // Update counters and show hint if it's for the current question
+        hintsLeftEl.textContent = String(payload.left ?? hintsLeftEl.textContent);
+        const posTeam = currentTeam.current_question;
+        const q = lastQuestions.find(qq => qq.position === posTeam);
+        if (q && payload.questionId === q.id) {
+          qHintEl.style.display = 'block';
+          qHintEl.textContent = `Hint: ${payload.hint || ''}`;
+        }
+      });
+
       // Show answer controls only for team captains
       socket.on('player_info', (info) => {
         isCreator = !!(info && info.is_creator);
         const controls = answerInput.parentElement;
         if (controls) controls.style.display = isCreator ? '' : 'none';
+        hintControls.style.display = isCreator ? '' : 'none';
       });
 
       socket.on("game_started", () => {
@@ -237,6 +289,7 @@
         existingTeams.style.display = 'none';
         currentTeamSection.style.display = 'none';
         socket.emit('player_get_questions');
+        socket.emit('player_get_hints_state');
       });
       socket.on("game_ended", () => {
         alert("Game ended!");
@@ -262,6 +315,7 @@
           socket.emit("resume", saved);
           socket.emit('player_get_questions');
           socket.emit('player_get_info');
+          socket.emit('player_get_hints_state');
         }
       } catch {}
     </script>
