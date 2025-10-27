@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html>
+  <body>
+    <h2>Admin Dashboard</h2>
+
+    <div id="login">
+      <input id="adminCode" type="password" placeholder="Enter admin code" />
+      <button id="adminLoginBtn">Login</button>
+      <span id="adminMsg" style="margin-left:8px;color:#b00"></span>
+    </div>
+
+    <div id="dashboard" style="display:none;">
+      <div id="controls" style="margin-bottom:12px;">
+        <button id="startBtn">Start Game</button>
+        <button id="endBtn" style="margin-left:8px;">End Game</button>
+        <span id="gameStateSpan" style="margin-left:12px;color:#555"></span>
+      </div>
+
+      <div id="overview" style="margin-bottom:16px;">
+        <h3>Overview</h3>
+        <div style="overflow:auto;">
+          <table id="teamsTable" border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; min-width: 600px;">
+            <thead id="teamsTableHead"></thead>
+            <tbody id="teamsTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div style="display:flex; gap:24px; align-items:flex-start;">
+        <div id="questionsPanel" style="flex:2;">
+          <h3>Questions</h3>
+          <ol id="questionsList"></ol>
+          <div style="margin-top:8px;">
+            <input id="qImage" placeholder="Image URL" style="width:40%;" />
+            <input id="qText" placeholder="Question text" style="width:40%; margin-left:6px;" />
+            <button id="addQBtn" style="margin-left:6px;">Add</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+      const socket = io();
+
+      const loginDiv = document.getElementById('login');
+      const dashboardDiv = document.getElementById('dashboard');
+      const adminMsg = document.getElementById('adminMsg');
+      const adminCodeInput = document.getElementById('adminCode');
+      const adminLoginBtn = document.getElementById('adminLoginBtn');
+
+      const startBtn = document.getElementById('startBtn');
+      const endBtn = document.getElementById('endBtn');
+      const gameStateSpan = document.getElementById('gameStateSpan');
+
+      const teamsTable = document.getElementById('teamsTable');
+      const teamsTableHead = document.getElementById('teamsTableHead');
+      const teamsTableBody = document.getElementById('teamsTableBody');
+      const qImage = document.getElementById('qImage');
+      const qText = document.getElementById('qText');
+      const addQBtn = document.getElementById('addQBtn');
+      const questionsList = document.getElementById('questionsList');
+
+      let state = { teams: [], questions: [], answers: [], game: null };
+
+      function renderGame() {
+        const g = state.game || { started: 0, ended: 0 };
+        gameStateSpan.textContent = `Started: ${g.started ? 'yes' : 'no'} | Ended: ${g.ended ? 'yes' : 'no'}`;
+      }
+
+      function renderTeams() {
+        // Build header: Team | Players | Q1 | Q2 | ...
+        teamsTableHead.innerHTML = '';
+        const headRow = document.createElement('tr');
+        const thTeam = document.createElement('th'); thTeam.textContent = 'Team'; headRow.appendChild(thTeam);
+        const thPlayers = document.createElement('th'); thPlayers.textContent = 'Players'; headRow.appendChild(thPlayers);
+        state.questions.forEach((q, idx) => {
+          const th = document.createElement('th'); th.textContent = `Q${idx+1}`; headRow.appendChild(th);
+        });
+        const thActions = document.createElement('th'); thActions.textContent = 'Actions'; headRow.appendChild(thActions);
+        teamsTableHead.appendChild(headRow);
+
+        // Precompute answers map teamId->questionId->answer
+        const answersMap = new Map();
+        state.answers.forEach(a => {
+          let m = answersMap.get(a.team_id); if (!m) { m = new Map(); answersMap.set(a.team_id, m); }
+          m.set(a.question_id, a.answer);
+        });
+
+        // Body
+        teamsTableBody.innerHTML = '';
+        state.teams.forEach(t => {
+          const tr = document.createElement('tr');
+          const tdTeam = document.createElement('td'); tdTeam.textContent = t.name; tr.appendChild(tdTeam);
+          const tdPlayers = document.createElement('td');
+          tdPlayers.style.whiteSpace = 'pre-line';
+          if (t.players_detail && t.players_detail.length) {
+            const lines = t.players_detail.map(p => `${p.name}${p.external_id ? ' ('+p.external_id+')' : ''}`);
+            tdPlayers.textContent = lines.join('\n');
+          } else {
+            tdPlayers.textContent = t.players.join(', ');
+          }
+          tr.appendChild(tdPlayers);
+          state.questions.forEach((q) => {
+            const td = document.createElement('td');
+            const ans = answersMap.get(t.id)?.get(q.id);
+            if (ans != null && ans !== '') {
+              td.textContent = ans;
+            } else {
+              // show progress marker if not yet answered
+              td.textContent = (t.current_question === q.position) ? '→' : '';
+            }
+            tr.appendChild(td);
+          });
+          const tdActions = document.createElement('td');
+          const delBtn = document.createElement('button');
+          delBtn.textContent = 'Delete';
+          delBtn.onclick = () => { if (confirm(`Delete team ${t.name}?`)) socket.emit('admin_delete_team', t.id); };
+          tdActions.appendChild(delBtn);
+          tr.appendChild(tdActions);
+          teamsTableBody.appendChild(tr);
+        });
+      }
+
+      function renderQuestions() {
+        questionsList.innerHTML = '';
+        state.questions.forEach((q, idx) => {
+          const li = document.createElement('li');
+          const line = document.createElement('div');
+          const img = document.createElement('span');
+          img.textContent = q.image_url ? `[img] ` : '';
+          const text = document.createElement('span');
+          text.textContent = q.text || '(no text)';
+          const upBtn = document.createElement('button');
+          upBtn.textContent = 'Up';
+          upBtn.style.marginLeft = '8px';
+          upBtn.disabled = idx === 0;
+          upBtn.onclick = () => socket.emit('admin_move_question', { id: q.id, direction: 'up' });
+          const downBtn = document.createElement('button');
+          downBtn.textContent = 'Down';
+          downBtn.style.marginLeft = '4px';
+          downBtn.disabled = idx === state.questions.length - 1;
+          downBtn.onclick = () => socket.emit('admin_move_question', { id: q.id, direction: 'down' });
+          const removeBtn = document.createElement('button');
+          removeBtn.textContent = 'Remove';
+          removeBtn.style.marginLeft = '8px';
+          removeBtn.onclick = () => socket.emit('admin_remove_question', q.id);
+
+          line.appendChild(img);
+          line.appendChild(text);
+          line.appendChild(upBtn);
+          line.appendChild(downBtn);
+          line.appendChild(removeBtn);
+          li.appendChild(line);
+          if (q.image_url) {
+            const preview = document.createElement('img');
+            preview.src = q.image_url;
+            preview.alt = 'preview';
+            preview.style.maxWidth = '160px';
+            preview.style.display = 'block';
+            preview.style.margin = '6px 0';
+            li.appendChild(preview);
+          }
+          questionsList.appendChild(li);
+        });
+      }
+
+      function renderAll() {
+        renderGame();
+        renderTeams();
+        renderQuestions();
+      }
+
+      adminLoginBtn.onclick = () => {
+        const code = adminCodeInput.value.trim();
+        if (!code) { adminMsg.textContent = 'Enter code'; return; }
+        adminMsg.textContent = '';
+        try { localStorage.setItem('adminCode', code); } catch {}
+        socket.emit('admin_login', code);
+      };
+
+      startBtn.onclick = () => socket.emit('start_game');
+      endBtn.onclick = () => socket.emit('end_game');
+      addQBtn.onclick = () => {
+        const image_url = qImage.value.trim();
+        const text = qText.value.trim();
+        socket.emit('admin_add_question', { image_url, text });
+        qImage.value = '';
+        qText.value = '';
+      };
+
+      socket.on('admin_logged_in', () => {
+        loginDiv.style.display = 'none';
+        dashboardDiv.style.display = 'block';
+      });
+
+      socket.on('admin_state', (payload) => {
+        state = payload;
+        renderAll();
+      });
+
+      socket.on('teams_update', (teams) => {
+        state.teams = teams;
+        renderTeams();
+      });
+
+      socket.on('questions_update', (questions) => {
+        state.questions = questions;
+        renderQuestions();
+      });
+
+      socket.on('admin_error', (msg) => {
+        adminMsg.textContent = msg || 'Error';
+      });
+
+      socket.on('game_started', () => {
+        if (state.game) state.game.started = 1, state.game.ended = 0;
+        renderGame();
+      });
+      socket.on('game_ended', () => {
+        if (state.game) state.game.ended = 1;
+        renderGame();
+      });
+
+      // Attempt auto-login using stored code
+      try {
+        const saved = localStorage.getItem('adminCode');
+        if (saved) {
+          socket.emit('admin_login', saved);
+        }
+      } catch {}
+    </script>
+  </body>
+  </html>

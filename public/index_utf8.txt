@@ -1,0 +1,251 @@
+﻿<!DOCTYPE html>
+<html>
+  <body>
+    <h2>Real-time Quiz</h2>
+
+    <div id="setup">
+      <input id="name" placeholder="Enter your name" />
+      <button id="joinBtn">Join</button>
+    </div>
+
+    <div id="teamSection" style="display:none;">
+      <h3 id="welcomeHeader">Welcome <span id="playerName"></span>
+        <button id="leaveBtn" style="display:none; margin-left:8px;">Leave Team</button>
+      </h3>
+      <div id="createTeamControls">
+        <input id="teamName" placeholder="Create team name" />
+        <button id="createTeamBtn">Create Team</button>
+      </div>
+
+      <div id="existingTeams">
+        <h4>Or join existing:</h4>
+        <ul id="teamsList"></ul>
+      </div>
+
+      <div id="currentTeamSection" style="display:none; margin-top:12px;">
+        <h4>Your Team: <span id="currentTeamName"></span></h4>
+        <ul id="memberList"></ul>
+      </div>
+
+      <div id="gameSection" style="display:none; margin-top:16px;">
+        <h3>Question</h3>
+        <div id="questionView">
+          <img id="qImageEl" alt="question" style="max-width: 260px; display:none;" />
+          <p id="qTextEl"></p>
+        </div>
+        <div>
+          <input id="answerInput" placeholder="Your answer" />
+          <button id="submitAnswerBtn">Submit</button>
+        </div>
+        <div id="finishedNotice" style="display:none; margin-top:8px; color:#0a0;">
+          Good job! You have completed all questions. Waiting for other teams to finish.
+        </div>
+      </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+      const socket = io();
+      const playerNameSpan = document.getElementById("playerName");
+      const leaveBtn = document.getElementById("leaveBtn");
+      const createTeamControls = document.getElementById("createTeamControls");
+      const existingTeams = document.getElementById("existingTeams");
+      const currentTeamSection = document.getElementById("currentTeamSection");
+      const currentTeamNameSpan = document.getElementById("currentTeamName");
+      const memberList = document.getElementById("memberList");
+      const gameSection = document.getElementById("gameSection");
+      const qImageEl = document.getElementById("qImageEl");
+      const qTextEl = document.getElementById("qTextEl");
+      const answerInput = document.getElementById("answerInput");
+      const submitAnswerBtn = document.getElementById("submitAnswerBtn");
+      const welcomeHeader = document.getElementById("welcomeHeader");
+      const finishedNotice = document.getElementById("finishedNotice");
+      let isCreator = false;
+      // (removed) frozen notice banner per request
+      leaveBtn.onclick = () => socket.emit("leave_team");
+
+      document.getElementById("joinBtn").onclick = () => {
+        const name = document.getElementById("name").value.trim();
+        socket.emit("join_player", name);
+      };
+
+      document.getElementById("createTeamBtn").onclick = () => {
+        const teamName = document.getElementById("teamName").value.trim();
+        socket.emit("create_team", teamName);
+      };
+
+      document.getElementById("teamsList").onclick = () => {
+        
+      }
+      socket.on("joined_as_player", (name) => {
+        document.getElementById("setup").style.display = "none";
+        document.getElementById("teamSection").style.display = "block";
+        playerNameSpan.textContent = name;
+        try { localStorage.setItem("playerName", name); } catch {}
+        socket.emit('player_get_info');
+      });
+
+      socket.on("name_taken", () => alert("Name already taken!"));
+      socket.on("resume_failed", () => {
+        try { localStorage.removeItem("playerName"); } catch {}
+      });
+      socket.on("team_name_taken", () => alert("Team name taken!"));
+      socket.on("team_full", () => alert("Team full!"));
+
+      let lastTeams = [];
+      let lastQuestions = [];
+      let lastGame = null;
+
+      function renderQuestion() {
+        if (!lastGame || !lastGame.started) {
+          gameSection.style.display = 'none';
+          finishedNotice.style.display = 'none';
+          return;
+        }
+        const playerName = playerNameSpan.textContent;
+        const currentTeam = lastTeams.find(t => t.players.includes(playerName));
+        if (!currentTeam) { gameSection.style.display = 'none'; finishedNotice.style.display = 'none'; return; }
+        const pos = currentTeam.current_question;
+        const q = lastQuestions.find(qq => qq.position === pos);
+        if (!q) {
+          // no more questions for this team
+          gameSection.style.display = 'none';
+          finishedNotice.style.display = 'block';
+          return;
+        }
+        qImageEl.style.display = q.image_url ? 'block' : 'none';
+        if (q.image_url) qImageEl.src = q.image_url;
+        qTextEl.textContent = q.text || '';
+        gameSection.style.display = 'block';
+        finishedNotice.style.display = 'none';
+      }
+      socket.on("teams_update", (teams) => {
+        const list = document.getElementById("teamsList");
+        list.innerHTML = "";
+
+        const playerName = playerNameSpan.textContent;
+        const currentTeam = teams.find(t => t.players.includes(playerName));
+        lastTeams = teams;
+        leaveBtn.style.display = currentTeam ? "inline-block" : "none";
+
+        if (currentTeam) {
+          createTeamControls.style.display = "none";
+          existingTeams.style.display = "none";
+          currentTeamSection.style.display = "block";
+          currentTeamNameSpan.textContent = currentTeam.name;
+          memberList.innerHTML = "";
+          currentTeam.players.forEach((p) => {
+            const li = document.createElement("li");
+            li.textContent = p;
+            memberList.appendChild(li);
+          });
+          renderQuestion();
+          return;
+        } else {
+          createTeamControls.style.display = "block";
+          existingTeams.style.display = "block";
+          currentTeamSection.style.display = "none";
+        }
+
+        teams.forEach((team) => {
+          const li = document.createElement("li");
+          const isCurrent = currentTeam && currentTeam.name === team.name;
+
+          const label = document.createElement("span");
+          label.textContent = `${team.name} (${team.players.length}/5)` + (isCurrent ? " — your team" : "");
+          li.appendChild(label);
+
+          if (isCurrent) {
+            const leaveBtn = document.createElement("button");
+            leaveBtn.textContent = "Leave";
+            leaveBtn.style.marginLeft = "8px";
+            leaveBtn.onclick = () => socket.emit("leave_team");
+            li.appendChild(leaveBtn);
+          } else if (!currentTeam) {
+            const joinBtn = document.createElement("button");
+            joinBtn.textContent = "Join";
+            joinBtn.style.marginLeft = "8px";
+            joinBtn.onclick = () => socket.emit("join_team", team.name);
+            li.appendChild(joinBtn);
+          }
+
+          list.appendChild(li);
+        });
+      });
+
+      socket.on("must_leave_first", () => alert("Leave your current team before joining another."));
+
+      function setFrozenUI(isFrozen) {
+        if (isFrozen) {
+          createTeamControls.style.display = 'none';
+          existingTeams.style.display = 'none';
+          leaveBtn.style.display = 'none';
+        }
+      }
+      socket.on("questions_payload", (payload) => {
+        lastQuestions = payload.questions || [];
+        lastGame = payload.game || null;
+        if (lastGame && lastGame.started) {
+          // hide team UI when game is active
+          leaveBtn.style.display = 'none';
+          createTeamControls.style.display = 'none';
+          existingTeams.style.display = 'none';
+          currentTeamSection.style.display = 'none';
+          if (welcomeHeader) welcomeHeader.style.display = 'none';
+        } else {
+          if (welcomeHeader) welcomeHeader.style.display = '';
+        }
+        renderQuestion();
+      });
+
+      submitAnswerBtn.onclick = () => {
+        const val = answerInput.value.trim();
+        if (!val) return;
+        socket.emit('submit_answer', val);
+        answerInput.value = '';
+      };
+
+      // Show answer controls only for team captains
+      socket.on('player_info', (info) => {
+        isCreator = !!(info && info.is_creator);
+        const controls = answerInput.parentElement;
+        if (controls) controls.style.display = isCreator ? '' : 'none';
+      });
+
+      socket.on("game_started", () => {
+        alert("Game started!");
+        if (welcomeHeader) welcomeHeader.style.display = 'none';
+        leaveBtn.style.display = 'none';
+        createTeamControls.style.display = 'none';
+        existingTeams.style.display = 'none';
+        currentTeamSection.style.display = 'none';
+        socket.emit('player_get_questions');
+      });
+      socket.on("game_ended", () => {
+        alert("Game ended!");
+        lastGame = { started: 0, ended: 1 };
+        // on end, re-show base UI; team list logic will toggle specifics
+        if (welcomeHeader) welcomeHeader.style.display = '';
+        finishedNotice.style.display = 'none';
+        gameSection.style.display = 'none';
+        createTeamControls.style.display = 'block';
+        existingTeams.style.display = 'block';
+        renderQuestion();
+      });
+      socket.on("game_frozen", () => alert("Teams are locked. You must wait until the game ends."));
+
+      try {
+        const saved = localStorage.getItem("playerName");
+        if (saved) {
+          socket.emit("resume", saved);
+          socket.emit('player_get_questions');
+          socket.emit('player_get_info');
+        }
+      } catch {}
+    </script>
+  </body>
+</html>
+
+
+
+
