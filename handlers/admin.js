@@ -59,11 +59,16 @@ module.exports = function registerAdminHandlers(io, db, socket, utils) {
     }
   });
 
-  socket.on("admin_add_question", ({ image_url, text, hint }) => {
+  socket.on("admin_add_question", ({ image_url, text, hint, correct_answer }) => {
     if (!socket.data.isAdmin) return;
     const cleanHint = (hint ?? "").toString().trim();
+    const cleanAnswer = (correct_answer ?? "").toString().trim();
     if (!cleanHint) {
       socket.emit("admin_error", "Hint is required for each question");
+      return;
+    }
+    if (!cleanAnswer) {
+      socket.emit("admin_error", "Correct answer is required for each question");
       return;
     }
     const maxPosRow = db
@@ -71,8 +76,8 @@ module.exports = function registerAdminHandlers(io, db, socket, utils) {
       .get();
     const nextPos = (maxPosRow?.maxp || 0) + 1;
     db.prepare(
-      "INSERT INTO questions (image_url, text, hint, position) VALUES (?, ?, ?, ?)"
-    ).run(image_url || null, text || null, cleanHint, nextPos);
+      "INSERT INTO questions (image_url, text, hint, correct_answer, position) VALUES (?, ?, ?, ?, ?)"
+    ).run(image_url || null, text || null, cleanHint, cleanAnswer, nextPos);
     io.to("admins").emit("questions_update", utils.getQuestions(db));
     utils.sendAdminState(io, db);
   });
@@ -122,6 +127,36 @@ module.exports = function registerAdminHandlers(io, db, socket, utils) {
         b.id
       );
     }
+    io.to("admins").emit("questions_update", utils.getQuestions(db));
+    utils.sendAdminState(io, db);
+  });
+
+  socket.on("admin_update_question", (payload) => {
+    if (!socket.data.isAdmin) return;
+    const { id } = payload || {};
+    if (!id) return;
+    const curr = db
+      .prepare(
+        "SELECT id, image_url, text, hint, correct_answer FROM questions WHERE id = ?"
+      )
+      .get(id);
+    if (!curr) return;
+    const image_url =
+      payload.hasOwnProperty("image_url") ? payload.image_url : curr.image_url;
+    const text = payload.hasOwnProperty("text") ? payload.text : curr.text;
+    const hint = payload.hasOwnProperty("hint") ? payload.hint : curr.hint;
+    const correct_answer = payload.hasOwnProperty("correct_answer")
+      ? payload.correct_answer
+      : curr.correct_answer;
+    const cleanHint = (hint ?? "").toString().trim();
+    const cleanAnswer = (correct_answer ?? "").toString().trim();
+    if (!cleanHint || !cleanAnswer) {
+      socket.emit("admin_error", "Hint and correct answer are required");
+      return;
+    }
+    db.prepare(
+      "UPDATE questions SET image_url = ?, text = ?, hint = ?, correct_answer = ? WHERE id = ?"
+    ).run(image_url || null, text || null, cleanHint, cleanAnswer, id);
     io.to("admins").emit("questions_update", utils.getQuestions(db));
     utils.sendAdminState(io, db);
   });

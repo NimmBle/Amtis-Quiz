@@ -23,6 +23,13 @@ const getAllTeams = (db) => {
 const getQuestions = (db) =>
   db
     .prepare(
+      "SELECT id, image_url, text, hint, correct_answer, position FROM questions ORDER BY position ASC, id ASC"
+    )
+    .all();
+
+const getQuestionsPublic = (db) =>
+  db
+    .prepare(
       "SELECT id, image_url, text, hint, position FROM questions ORDER BY position ASC, id ASC"
     )
     .all();
@@ -73,6 +80,7 @@ const sendAdminState = (io, db, target) => {
 module.exports = {
   getAllTeams,
   getQuestions,
+  getQuestionsPublic,
   getAnswers,
   getGameState,
   isGameStarted,

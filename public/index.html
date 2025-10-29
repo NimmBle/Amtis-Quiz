@@ -239,8 +239,16 @@
         const val = answerInput.value.trim();
         if (!val) return;
         socket.emit('submit_answer', val);
-        answerInput.value = '';
       };
+
+      socket.on('answer_result', (res) => {
+        if (!res || !res.correct) {
+          alert(res && res.message ? res.message : 'Wrong answer. Try again.');
+          return;
+        }
+        // correct: optionally clear input; next question renders from teams_update
+        answerInput.value = '';
+      });
 
       // Hints: request and update
       getHintBtn.onclick = () => {

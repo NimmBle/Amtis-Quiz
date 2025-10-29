@@ -32,9 +32,10 @@
           <div style='margin: 6px 0 10px 0;'><label>Max hints per team: <input id='maxHintsInput' type='number' min='0' step='1' style='width:80px;' /></label> <button id='saveMaxHintsBtn' style='margin-left:6px;'>Save</button> <span id='maxHintsMsg' style='margin-left:8px;color:#555'></span></div>
           <ol id="questionsList"></ol>
           <div style="margin-top:8px;">
-            <input id="qImage" placeholder="Image URL" style="width:40%;" />
-            <input id="qText" placeholder="Question text" style="width:28%; margin-left:6px;" />
-            <input id="qHint" placeholder="Hint (required)" style="width:28%; margin-left:6px;" />
+            <input id="qImage" placeholder="Image URL" style="width:30%;" />
+            <input id="qText" placeholder="Question text" style="width:22%; margin-left:6px;" />
+            <input id="qHint" placeholder="Hint (required)" style="width:22%; margin-left:6px;" />
+            <input id="qAnswer" placeholder="Correct Answer (required)" style="width:22%; margin-left:6px;" />
             <button id="addQBtn" style="margin-left:6px;">Add</button>
           </div>
         </div>
@@ -61,6 +62,7 @@
       const qImage = document.getElementById('qImage');
       const qText = document.getElementById('qText');
       const qHint = document.getElementById('qHint');
+      const qAnswer = document.getElementById('qAnswer');
       const maxHintsInput = document.getElementById('maxHintsInput');
       const saveMaxHintsBtn = document.getElementById('saveMaxHintsBtn');
       const maxHintsMsg = document.getElementById('maxHintsMsg');
@@ -133,13 +135,36 @@
         state.questions.forEach((q, idx) => {
           const li = document.createElement('li');
           const line = document.createElement('div');
-          const img = document.createElement('span');
-          img.textContent = q.image_url ? `[img] ` : '';
-          const text = document.createElement('span');
-          text.textContent = q.text || '(no text)';
-          const hintSpan = document.createElement('div');
-          hintSpan.textContent = q.hint ? `Hint: ${q.hint}` : 'Hint: (missing)';
-          hintSpan.style.color = q.hint ? '#555' : '#b00';
+          // Inline editable inputs for question fields
+          const imgInput = document.createElement('input');
+          imgInput.placeholder = 'Image URL';
+          imgInput.style.width = '30%';
+          imgInput.value = q.image_url || '';
+          imgInput.disabled = true;
+
+          const textInput = document.createElement('input');
+          textInput.placeholder = 'Question text';
+          textInput.style.width = '22%';
+          textInput.style.marginLeft = '6px';
+          textInput.value = q.text || '';
+          textInput.disabled = true;
+
+          const hintInput = document.createElement('input');
+          hintInput.placeholder = 'Hint (required)';
+          hintInput.style.width = '22%';
+          hintInput.style.marginLeft = '6px';
+          hintInput.value = q.hint || '';
+          hintInput.disabled = true;
+
+          const ansInput = document.createElement('input');
+          ansInput.placeholder = 'Correct Answer (required)';
+          ansInput.style.width = '22%';
+          ansInput.style.marginLeft = '6px';
+          ansInput.value = q.correct_answer || '';
+          ansInput.disabled = true;
+          const ansSpan = document.createElement('div');
+          ansSpan.textContent = q.correct_answer ? `Answer: ${q.correct_answer}` : 'Answer: (missing)';
+          ansSpan.style.color = q.correct_answer ? '#555' : '#b00';
           const upBtn = document.createElement('button');
           upBtn.textContent = 'Up';
           upBtn.style.marginLeft = '8px';
@@ -150,18 +175,46 @@
           downBtn.style.marginLeft = '4px';
           downBtn.disabled = idx === state.questions.length - 1;
           downBtn.onclick = () => socket.emit('admin_move_question', { id: q.id, direction: 'down' });
+          const editSaveBtn = document.createElement('button');
+          editSaveBtn.textContent = 'Edit';
+          editSaveBtn.style.marginLeft = '8px';
+          let editing = false;
+          const setEditing = (on) => {
+            editing = on;
+            imgInput.disabled = !on;
+            textInput.disabled = !on;
+            hintInput.disabled = !on;
+            ansInput.disabled = !on;
+            editSaveBtn.textContent = on ? 'Save' : 'Edit';
+          };
+          editSaveBtn.onclick = () => {
+            if (!editing) {
+              setEditing(true);
+              return;
+            }
+            const image_url = imgInput.value.trim();
+            const text = textInput.value.trim();
+            const hint = hintInput.value.trim();
+            const correct_answer = ansInput.value.trim();
+            if (!hint || !correct_answer) { alert('Hint and Correct Answer are required'); return; }
+            socket.emit('admin_update_question', { id: q.id, image_url, text, hint, correct_answer });
+            setEditing(false);
+          };
           const removeBtn = document.createElement('button');
           removeBtn.textContent = 'Remove';
           removeBtn.style.marginLeft = '8px';
           removeBtn.onclick = () => socket.emit('admin_remove_question', q.id);
 
-          line.appendChild(img);
-          line.appendChild(text);
+          line.appendChild(imgInput);
+          line.appendChild(textInput);
+          line.appendChild(hintInput);
+          line.appendChild(ansInput);
           line.appendChild(upBtn);
           line.appendChild(downBtn);
+          line.appendChild(editSaveBtn);
           line.appendChild(removeBtn);
           li.appendChild(line);
-          li.appendChild(hintSpan);
+          // no extra spans; values are inline above
           if (q.image_url) {
             const preview = document.createElement('img');
             preview.src = q.image_url;
@@ -195,11 +248,14 @@
         const image_url = qImage.value.trim();
         const text = qText.value.trim();
         const hint = qHint.value.trim();
+        const correct_answer = qAnswer.value.trim();
         if (!hint) { alert('Hint is required'); return; }
-        socket.emit('admin_add_question', { image_url, text, hint });
+        if (!correct_answer) { alert('Correct answer is required'); return; }
+        socket.emit('admin_add_question', { image_url, text, hint, correct_answer });
         qImage.value = '';
         qText.value = '';
         qHint.value = '';
+        qAnswer.value = '';
       };
 
       socket.on('admin_logged_in', () => {

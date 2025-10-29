@@ -21,7 +21,8 @@ CREATE TABLE IF NOT EXISTS questions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   image_url TEXT,
   text TEXT,
-  hint TEXT
+  hint TEXT,
+  correct_answer TEXT
 );
 
 CREATE TABLE IF NOT EXISTS answers (
@@ -71,6 +72,14 @@ const hasHint = columns.some(c => c.name === 'hint');
 if (!hasHint) {
   db.exec(`
     ALTER TABLE questions ADD COLUMN hint TEXT;
+  `);
+}
+
+// Ensure questions.correct_answer exists (for existing DBs)
+const hasCorrect = columns.some(c => c.name === 'correct_answer');
+if (!hasCorrect) {
+  db.exec(`
+    ALTER TABLE questions ADD COLUMN correct_answer TEXT;
   `);
 }
 

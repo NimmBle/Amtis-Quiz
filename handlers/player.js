@@ -9,7 +9,7 @@ module.exports = function registerPlayerHandlers(io, db, socket, utils) {
       socket.emit("joined_as_player", playerName);
       socket.emit("teams_update", utils.getAllTeams(db));
       socket.emit("questions_payload", {
-        questions: utils.getQuestions(db),
+        questions: utils.getQuestionsPublic(db),
         game: utils.getGameState(db),
       });
     } else {
@@ -153,23 +153,30 @@ module.exports = function registerPlayerHandlers(io, db, socket, utils) {
     if (gameState.ended) return;
     const currentPosition = team.current_question;
     const qRow = db
-      .prepare("SELECT id FROM questions WHERE position = ?")
+      .prepare("SELECT id, correct_answer FROM questions WHERE position = ?")
       .get(currentPosition);
-    const questionId = qRow ? qRow.id : null;
-    if (!questionId) return;
-    db.prepare(
-      "INSERT INTO answers (team_id, question_id, answer) VALUES (?, ?, ?)"
-    ).run(team.id, questionId, answer);
-    db.prepare(
-      "UPDATE teams SET current_question = current_question + 1 WHERE id = ?"
-    ).run(team.id);
-    io.emit("teams_update", utils.getAllTeams(db));
-    utils.sendAdminState(io, db);
+    if (!qRow) return;
+    const normalize = (s) => (s ?? "").toString().trim().toLowerCase().replace(/\s+/g, " ");
+    const given = normalize(answer);
+    const correct = normalize(qRow.correct_answer);
+    if (given && correct && given === correct) {
+      db.prepare(
+        "INSERT INTO answers (team_id, question_id, answer) VALUES (?, ?, ?)"
+      ).run(team.id, qRow.id, answer);
+      db.prepare(
+        "UPDATE teams SET current_question = current_question + 1 WHERE id = ?"
+      ).run(team.id);
+      io.emit("teams_update", utils.getAllTeams(db));
+      socket.emit("answer_result", { correct: true });
+      utils.sendAdminState(io, db);
+    } else {
+      socket.emit("answer_result", { correct: false, message: "Wrong answer. Try again." });
+    }
   });
 
   socket.on("player_get_questions", () => {
     socket.emit("questions_payload", {
-      questions: utils.getQuestions(db),
+      questions: utils.getQuestionsPublic(db),
       game: utils.getGameState(db),
     });
   });
