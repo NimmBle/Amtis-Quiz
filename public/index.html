@@ -7,50 +7,61 @@
     <title>Quiz</title>
   </head>
   <body>
-    <h2>Real-time Quiz</h2>
+    <header>
+      <img src="/images/logo-rtppp.jpg" alt="logo-az-moga">
+      <span> Куест-АзМогаТукИСега</span>
+    </header>
 
-    <div id="setup" class="row">
-      <input id="name" class="input" placeholder="Enter your name" />
-      <input id="extId" class="input" placeholder="Enter your ID" />
-      <button id="joinBtn" class="btn btn--primary">Join</button>
+    <div id="setup" class="d-f-fd-c register">
+      <img src="/images/logo-quest.svg" alt="logo-az-moga-guest">
+      <span class="register-heading">Време е за <span class="accent-word">мисия</span>!</span>
+      <span>Влез, за да отключиш следващото ниво от нашия куест. Подготви се – логиката, наблюдателността и бързата мисъл ще бъдат твоите оръжия.</span>
+      <input id="name" class="input" placeholder="Въведи името си" />
+      <input id="extId" class="input" placeholder="Въведи ID-то от баджа си" />
+      <button id="joinBtn" class="btn btn--primary">Включи се</button>
     </div>
 
     <div id="teamSection" style="display:none;">
-      <h3 id="welcomeHeader">Welcome <span id="playerName"></span>
-        <button id="leaveBtn" class="btn" style="display:none;">Leave Team</button>
-      </h3>
-      <div id="createTeamControls" class="row">
-        <input id="teamName" class="input" placeholder="Create team name" />
-        <button id="createTeamBtn" class="btn">Create Team</button>
+      <div id="welcomeHeader" class="welcome-header">
+        <h3>
+          Хей, куестър <span id="playerName" class="accent-word"></span>!
+        </h3>
+        <button id="leaveBtn" class="btn--leave" style="display:none;">Напусни отбора</button>
       </div>
 
-      <div id="existingTeams">
-        <h4>Or join existing:</h4>
-        <ul id="teamsList"></ul>
+      <div id="createTeamControls" class="row create-team-section">
+        <span>Стани капитан и създай свой отбор</span>
+        <input id="teamName" class="input" placeholder="Име на отбора" />
+        <button id="createTeamBtn" class="btn btn--primary">Създай отбор</button>
       </div>
 
-      <div id="currentTeamSection" class="mt-3" style="display:none;">
-        <h4>Your Team: <span id="currentTeamName"></span></h4>
+      <div id="existingTeams" class="existing-teams">
+        <span>Или се включи към вече съществуващ</span>
+        <ul id="teamsList" class="teams"></ul>
+      </div>
+
+      <div id="currentTeamSection" class="your-team" style="display:none;">
+        <h4>Твоят отбор: <span id="currentTeamName"></span></h4>
         <ul id="memberList"></ul>
       </div>
 
-      <div id="gameSection" class="mt-4" style="display:none;">
-        <h3>Question</h3>
+      <div id="gameSection" class="mt-4 question-section" style="display:none;">
+        <h3 id="gameSectionHeading">Загадка</h3>
         <div id="questionView">
-          <img id="qImageEl" alt="question" style="max-width: 260px; display:none;" />
+          <img id="qImageEl" alt="question" style="display:none;" />
           <p id="qTextEl"></p>
           <p id="qHintEl" style="display:none; color:#555;"></p>
         </div>
-        <div class="row">
+        <div class="d-f-fd-c answer-holder">
           <input id="answerInput" class="input" placeholder="Your answer" />
-          <button id="submitAnswerBtn" class="btn btn--primary">Submit</button>
+          <button id="submitAnswerBtn" class="btn btn--primary btn--submit">Дали познах?</button>
         </div>
-        <div id="hintControls" class="row" style="margin-top:8px;">
-          <span>Hints left: <strong id="hintsLeft">0</strong></span>
-          <button id="getHintBtn" class="btn">Get Hint</button>
+        <div id="hintControls" class="d-f-fd-c hint-controls" style="margin-top:8px;">
+          <span>Оставащи подсказки: <strong id="hintsLeft">0</strong></span>
+          <button id="getHintBtn" class="btn">Нужна ми е подсказка</button>
         </div>
         <div id="finishedNotice" style="display:none; margin-top:8px; color:#0a0;">
-          Good job! You have completed all questions. Waiting for other teams to finish.
+         Страхотна работа! Ти се справи с всички загадки безупречно!
         </div>
       </div>
     </div>
@@ -66,6 +77,7 @@
       const currentTeamNameSpan = document.getElementById("currentTeamName");
       const memberList = document.getElementById("memberList");
       const gameSection = document.getElementById("gameSection");
+      const gameSectionHeading = document.getElementById("gameSectionHeading");
       const qImageEl = document.getElementById("qImageEl");
       const qTextEl = document.getElementById("qTextEl");
       const qHintEl = document.getElementById("qHintEl");
@@ -139,11 +151,22 @@
         const pos = currentTeam.current_question;
         const q = lastQuestions.find(qq => qq.position === pos);
         if (!q) {
-          // no more questions for this team
           gameSection.style.display = 'none';
           finishedNotice.style.display = 'block';
+          finishedNotice.innerHTML = `
+            <div style="text-align:center;">
+              <img src="/images/congrats.png" alt="congrats" style="max-width:300px; margin-bottom:20px;"/>
+              <h2 style="color:#28a745;">🎉 Браво, приключи мисията успешно! 🎉</h2>
+              <p style="font-size:18px; color:#333;">Ти и твоят отбор показахте невероятна логика, бързина и работа в екип.</p>
+              <p style="font-size:16px; color:#666;">Очаквай следващото приключение съвсем скоро!</p>
+            </div>
+          `;
           return;
         }
+        const colors = ['#0e1a2a', '#ff8900', '#0657a4','#fff', '#349a47', '#d71724', '#d71724'];
+        const color = colors[(pos - 1) % colors.length];
+        submitAnswerBtn.style.backgroundColor = color;
+        gameSectionHeading.style.color = color;
         qImageEl.style.display = q.image_url ? 'block' : 'none';
         if (q.image_url) qImageEl.src = q.image_url;
         qTextEl.textContent = q.text || '';
@@ -152,7 +175,7 @@
         // show hint if already taken for this question
         if (lastHints.hintedQuestionIds && lastHints.hintedQuestionIds.includes(q.id)) {
           qHintEl.style.display = 'block';
-          qHintEl.textContent = `Hint: ${q.hint || ''}`;
+          qHintEl.textContent = `Подсказка: ${q.hint || ''}`;
         } else {
           qHintEl.style.display = 'none';
           qHintEl.textContent = '';
@@ -190,7 +213,7 @@
           memberList.innerHTML = "";
           currentTeam.players.forEach((p) => {
             const li = document.createElement("li");
-            li.textContent = p + (currentTeam.captain && currentTeam.captain === p ? " (captain)" : "");
+            li.textContent = p + (currentTeam.captain && currentTeam.captain === p ? " (капитан)" : "");
             memberList.appendChild(li);
           });
           renderQuestion();
@@ -217,8 +240,8 @@
             li.appendChild(leaveBtn);
           } else if (!currentTeam) {
             const joinBtn = document.createElement("button");
-            joinBtn.className = 'btn';
-            joinBtn.textContent = "Join";
+            joinBtn.className = 'btn btn--primary-reversed';
+            joinBtn.textContent = "Влез";
             joinBtn.onclick = () => socket.emit("join_team", team.name);
             li.appendChild(joinBtn);
           }
@@ -260,7 +283,8 @@
 
       socket.on('answer_result', (res) => {
         if (!res || !res.correct) {
-          alert(res && res.message ? res.message : 'Wrong answer. Try again.');
+          answerInput.style.borderColor = 'red';
+          answerInput.style.borderWidth = '2px';
           return;
         }
         // correct: optionally clear input; next question renders from teams_update
