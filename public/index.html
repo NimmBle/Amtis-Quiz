@@ -1,21 +1,27 @@
 ﻿<!DOCTYPE html>
 <html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="/styles.css" />
+    <title>Quiz</title>
+  </head>
   <body>
     <h2>Real-time Quiz</h2>
 
-    <div id="setup">
-      <input id="name" placeholder="Enter your name" />
-      <input id="extId" placeholder="Enter your ID" />
-      <button id="joinBtn">Join</button>
+    <div id="setup" class="row">
+      <input id="name" class="input" placeholder="Enter your name" />
+      <input id="extId" class="input" placeholder="Enter your ID" />
+      <button id="joinBtn" class="btn btn--primary">Join</button>
     </div>
 
     <div id="teamSection" style="display:none;">
       <h3 id="welcomeHeader">Welcome <span id="playerName"></span>
-        <button id="leaveBtn" style="display:none; margin-left:8px;">Leave Team</button>
+        <button id="leaveBtn" class="btn" style="display:none;">Leave Team</button>
       </h3>
-      <div id="createTeamControls">
-        <input id="teamName" placeholder="Create team name" />
-        <button id="createTeamBtn">Create Team</button>
+      <div id="createTeamControls" class="row">
+        <input id="teamName" class="input" placeholder="Create team name" />
+        <button id="createTeamBtn" class="btn">Create Team</button>
       </div>
 
       <div id="existingTeams">
@@ -23,25 +29,25 @@
         <ul id="teamsList"></ul>
       </div>
 
-      <div id="currentTeamSection" style="display:none; margin-top:12px;">
+      <div id="currentTeamSection" class="mt-3" style="display:none;">
         <h4>Your Team: <span id="currentTeamName"></span></h4>
         <ul id="memberList"></ul>
       </div>
 
-      <div id="gameSection" style="display:none; margin-top:16px;">
+      <div id="gameSection" class="mt-4" style="display:none;">
         <h3>Question</h3>
         <div id="questionView">
           <img id="qImageEl" alt="question" style="max-width: 260px; display:none;" />
           <p id="qTextEl"></p>
           <p id="qHintEl" style="display:none; color:#555;"></p>
         </div>
-        <div>
-          <input id="answerInput" placeholder="Your answer" />
-          <button id="submitAnswerBtn">Submit</button>
+        <div class="row">
+          <input id="answerInput" class="input" placeholder="Your answer" />
+          <button id="submitAnswerBtn" class="btn btn--primary">Submit</button>
         </div>
-        <div id="hintControls" style="margin-top:8px;">
+        <div id="hintControls" class="row" style="margin-top:8px;">
           <span>Hints left: <strong id="hintsLeft">0</strong></span>
-          <button id="getHintBtn" style="margin-left:8px;">Get Hint</button>
+          <button id="getHintBtn" class="btn">Get Hint</button>
         </div>
         <div id="finishedNotice" style="display:none; margin-top:8px; color:#0a0;">
           Good job! You have completed all questions. Waiting for other teams to finish.
@@ -165,6 +171,17 @@
         // Refresh captain status on any team change
         socket.emit('player_get_info');
 
+        // If the game is in progress, keep team UI hidden and focus on the question view
+        if (lastGame && lastGame.started) {
+          if (welcomeHeader) welcomeHeader.style.display = 'none';
+          createTeamControls.style.display = 'none';
+          existingTeams.style.display = 'none';
+          currentTeamSection.style.display = 'none';
+          leaveBtn.style.display = 'none';
+          renderQuestion();
+          return;
+        }
+
         if (currentTeam) {
           createTeamControls.style.display = "none";
           existingTeams.style.display = "none";
@@ -194,14 +211,14 @@
 
           if (isCurrent) {
             const leaveBtn = document.createElement("button");
+            leaveBtn.className = 'btn';
             leaveBtn.textContent = "Leave";
-            leaveBtn.style.marginLeft = "8px";
             leaveBtn.onclick = () => socket.emit("leave_team");
             li.appendChild(leaveBtn);
           } else if (!currentTeam) {
             const joinBtn = document.createElement("button");
+            joinBtn.className = 'btn';
             joinBtn.textContent = "Join";
-            joinBtn.style.marginLeft = "8px";
             joinBtn.onclick = () => socket.emit("join_team", team.name);
             li.appendChild(joinBtn);
           }
@@ -329,6 +346,8 @@
     </script>
   </body>
 </html>
+
+
 
 
 

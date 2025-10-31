@@ -1,0 +1,95 @@
+:root {
+  --bg: #ffffff;
+  --text: #111827;
+  --surface: #f8fafc;
+  --border: #e5e7eb;
+  --primary: #2563eb;
+  --danger: #dc2626;
+  --radius: 8px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --shadow-1: 0 1px 2px rgba(0,0,0,0.06);
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  padding: var(--space-4);
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+  line-height: 1.45;
+}
+h1, h2, h3 { margin: 0 0 var(--space-3) 0; }
+
+.stack > * + * { margin-top: var(--space-2); }
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.row-start {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+.mt-2 { margin-top: var(--space-2); }
+.mt-3 { margin-top: var(--space-3); }
+.mt-4 { margin-top: var(--space-4); }
+.mb-2 { margin-bottom: var(--space-2); }
+.mb-3 { margin-bottom: var(--space-3); }
+.mb-4 { margin-bottom: var(--space-4); }
+.my-2 { margin-top: var(--space-2); margin-bottom: var(--space-2); }
+.overflow-auto { overflow: auto; }
+.min-600 { min-width: 600px; }
+.w-30 { width: 30%; }
+.w-22 { width: 22%; }
+.w-80 { width: 80px; }
+.muted { color: #6b7280; }
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-1);
+  padding: var(--space-4);
+}
+
+.flex-2 {
+  flex: 2;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.btn:hover { filter: brightness(0.98); }
+.btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.btn--primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+.btn--danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+
+.input {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+}
+
+table { border-collapse: collapse; width: 100%; }
+th, td { border: 1px solid var(--border); padding: 8px 10px; text-align: left; }
+
+img { max-width: 100%; height: auto; }
