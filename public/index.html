@@ -170,6 +170,7 @@
         qImageEl.style.display = q.image_url ? 'block' : 'none';
         if (q.image_url) qImageEl.src = q.image_url;
         qTextEl.textContent = q.text || '';
+        console.log("Here, yes!");
         gameSection.style.display = 'block';
         finishedNotice.style.display = 'none';
         // show hint if already taken for this question
@@ -180,8 +181,7 @@
           qHintEl.style.display = 'none';
           qHintEl.textContent = '';
         }
-        // refresh hints state when showing a question
-        socket.emit('player_get_hints_state');
+        // Do not request hints state here to avoid feedback loops
       }
       socket.on("teams_update", (teams) => {
         const list = document.getElementById("teamsList");
@@ -262,16 +262,7 @@
       socket.on("questions_payload", (payload) => {
         lastQuestions = payload.questions || [];
         lastGame = payload.game || null;
-        if (lastGame && lastGame.started) {
-          // hide team UI when game is active
-          leaveBtn.style.display = 'none';
-          createTeamControls.style.display = 'none';
-          existingTeams.style.display = 'none';
-          currentTeamSection.style.display = 'none';
-          if (welcomeHeader) welcomeHeader.style.display = 'none';
-        } else {
-          if (welcomeHeader) welcomeHeader.style.display = '';
-        }
+        // Do not force-hide team UI here; teams_update will decide based on membership and game state
         renderQuestion();
       });
 
@@ -303,8 +294,22 @@
         // hide hint button for non-captains; show for captains with hints left
         hintControls.style.display = isCreator ? '' : 'none';
         getHintBtn.disabled = left <= 0 || !isCreator;
-        // re-render question hint visibility in case state changed
-        renderQuestion();
+        // Update hint visibility for the current question without re-rendering everything
+        const playerName = playerNameSpan.textContent;
+        const currentTeam = lastTeams.find(t => t.players.includes(playerName));
+        if (currentTeam && lastGame && lastGame.started) {
+          const pos = currentTeam.current_question;
+          const q = lastQuestions.find(qq => qq.position === pos);
+          if (q) {
+            if (lastHints.hintedQuestionIds && lastHints.hintedQuestionIds.includes(q.id)) {
+              qHintEl.style.display = 'block';
+              qHintEl.textContent = `Hint: ${q.hint || ''}`;
+            } else {
+              qHintEl.style.display = 'none';
+              qHintEl.textContent = '';
+            }
+          }
+        }
       });
 
       socket.on('hint_revealed', (payload) => {

@@ -7,11 +7,13 @@ module.exports = function registerPlayerHandlers(io, db, socket, utils) {
     if (player) {
       socket.data.playerName = playerName;
       socket.emit("joined_as_player", playerName);
-      socket.emit("teams_update", utils.getAllTeams(db));
+      // Send game/questions first so the client knows if the game is started
       socket.emit("questions_payload", {
         questions: utils.getQuestionsPublic(db),
         game: utils.getGameState(db),
       });
+      // Then send team info; client can decide visibility based on game state
+      socket.emit("teams_update", utils.getAllTeams(db));
     } else {
       socket.emit("resume_failed");
     }
@@ -41,19 +43,26 @@ module.exports = function registerPlayerHandlers(io, db, socket, utils) {
   socket.on("create_team", (teamName) => {
     const playerName = socket.data.playerName;
     if (!playerName) return;
-    if (utils.isGameStarted(db)) {
-      socket.emit("game_frozen");
-      return;
+    const gameStarted = utils.isGameStarted(db);
+    if (gameStarted) {
+      const p = db.prepare("SELECT team_id FROM players WHERE name = ?").get(playerName);
+      if (p && p.team_id) { socket.emit("game_frozen"); return; }
     }
     try {
       const result = db
         .prepare("INSERT INTO teams (name) VALUES (?)")
         .run(teamName);
       const teamId = result.lastInsertRowid;
+      if (gameStarted) {
+        db.prepare("UPDATE teams SET current_question = 1 WHERE id = ?").run(teamId);
+      }
       db.prepare(
         "UPDATE players SET team_id = ?, is_creator = 1 WHERE name = ?"
       ).run(teamId, playerName);
       io.emit("teams_update", utils.getAllTeams(db));
+      if (gameStarted) {
+        socket.emit("questions_payload", { questions: utils.getQuestionsPublic(db), game: utils.getGameState(db) });
+      }
       utils.sendAdminState(io, db);
     } catch {
       socket.emit("team_name_taken");
@@ -63,10 +72,7 @@ module.exports = function registerPlayerHandlers(io, db, socket, utils) {
   socket.on("join_team", (teamName) => {
     const playerName = socket.data.playerName;
     if (!playerName) return;
-    if (utils.isGameStarted(db)) {
-      socket.emit("game_frozen");
-      return;
-    }
+    const gameStarted = utils.isGameStarted(db);
     const team = db
       .prepare("SELECT id FROM teams WHERE name = ?")
       .get(teamName);
@@ -74,6 +80,7 @@ module.exports = function registerPlayerHandlers(io, db, socket, utils) {
     const player = db
       .prepare("SELECT team_id FROM players WHERE name = ?")
       .get(playerName);
+    if (gameStarted && player && player.team_id) { socket.emit("must_leave_first"); return; }
     if (player && player.team_id && player.team_id !== team.id) {
       socket.emit("must_leave_first");
       return;
@@ -107,6 +114,9 @@ module.exports = function registerPlayerHandlers(io, db, socket, utils) {
       );
     }
     io.emit("teams_update", utils.getAllTeams(db));
+    if (gameStarted) {
+      socket.emit("questions_payload", { questions: utils.getQuestionsPublic(db), game: utils.getGameState(db) });
+    }
     utils.sendAdminState(io, db);
   });
 
