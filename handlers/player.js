@@ -132,9 +132,7 @@
       .prepare("SELECT team_id FROM players WHERE name = ?")
       .get(playerName);
     const teamId = row ? row.team_id : null;
-    db.prepare("UPDATE players SET team_id = NULL WHERE name = ?").run(
-      playerName
-    );
+    db.prepare("UPDATE players SET team_id = NULL, is_creator = 0 WHERE name = ?").run(playerName);
     if (teamId) {
       const count = db
         .prepare("SELECT COUNT(*) as c FROM players WHERE team_id = ?")
@@ -230,13 +228,10 @@
       // already took a hint for this question; still emit state
       const hs = utils.getTeamHintsState(db, team.id);
       socket.emit("hints_state", hs);
-      utils.sendAdminState(io, db)
+      utils.sendAdminState(io, db);
       return;
     }
-    db.prepare("INSERT INTO hints (team_id, question_id) VALUES (?, ?)").run(
-      team.id,
-      q.id
-    );
+    db.prepare("INSERT INTO hints (team_id, question_id) VALUES (?, ?)").run(team.id, q.id);
     const hs = utils.getTeamHintsState(db, team.id);
     // Broadcast hint reveal to all clients; clients filter by team
     // Also send latest hints state to trigger counters update client-side
@@ -248,6 +243,7 @@
       left: hs.left,
       max: hs.max,
     });
+    utils.sendAdminState(io, db);
   });
 
   socket.on("player_get_info", () => {

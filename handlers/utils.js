@@ -41,7 +41,8 @@ const getAnswers = (db) =>
 
 const getGameState = (db) => db.prepare("SELECT * FROM game_state WHERE id = 1").get();
 
-const getUsedHints = (db) => db.prepare("SELECT id, team_id, question_id, created_at FROM hints")
+const getUsedHints = (db) =>
+  db.prepare("SELECT id, team_id, question_id, created_at FROM hints ORDER BY id ASC").all();
 
 const isGameStarted = (db) => {
   const s = getGameState(db);

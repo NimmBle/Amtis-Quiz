@@ -102,6 +102,11 @@
           if (!m) { m = new Map(); answersMap.set(a.team_id, m); }
           m.set(a.question_id, a.answer);
         });
+        const hintsByTeam = new Map();
+        (state.used_hints || []).forEach((h) => {
+          const current = hintsByTeam.get(h.team_id) || 0;
+          hintsByTeam.set(h.team_id, current + 1);
+        });
 
         teamsTableBody.innerHTML = '';
         state.teams.forEach((t) => {
@@ -134,14 +139,10 @@
           delBtn.onclick = () => { if (confirm(`Delete team ${t.name}?`)) socket.emit('admin_delete_team', t.id); };
           tdActions.appendChild(delBtn);
           tr.appendChild(tdActions);
-          
-          // const tdHintUsed = document.createElement('td');
-          // let hintsUsed = 0;
-          // state.used_hints.forEach((h => {
-          //   if (h.team_id == t.id) hintsUsed++
-          // }))
-          // tdHintUsed.textContext = hintsUsed
-          // tr.appendChild(tdHintUsed);
+
+          const tdHintsUsed = document.createElement('td');
+          tdHintsUsed.textContent = String(hintsByTeam.get(t.id) || 0);
+          tr.appendChild(tdHintsUsed);
 
           teamsTableBody.appendChild(tr);
         });
