@@ -1,4 +1,4 @@
-module.exports = function registerPlayerHandlers(io, db, socket, utils) {
+﻿module.exports = function registerPlayerHandlers(io, db, socket, utils) {
   socket.on("resume", (playerName) => {
     if (!playerName) return;
     const player = db
@@ -255,5 +255,112 @@ module.exports = function registerPlayerHandlers(io, db, socket, utils) {
       .prepare("SELECT is_creator FROM players WHERE name = ?")
       .get(playerName);
     socket.emit("player_info", { is_creator: !!(p && p.is_creator) });
+
+  // ---------- Join requests (captain approval) ----------
+
+  // Applicants request to join a team (does not assign immediately)
+  socket.on("request_join_team", (teamName) => {
+    const playerName = socket.data.playerName;
+    if (!playerName || !teamName) return;
+    const team = db.prepare("SELECT id, name FROM teams WHERE name = ?").get(teamName);
+    if (!team) return;
+
+    // Must be unassigned
+    const applicant = db.prepare("SELECT team_id FROM players WHERE name = ?").get(playerName);
+    if (!applicant || applicant.team_id) {
+      socket.emit("join_result", { playerName, accepted: false, reason: "already_in_team" });
+      return;
+    }
+    // Soft capacity check
+    const cnt = db.prepare("SELECT COUNT(*) as c FROM players WHERE team_id = ?").get(team.id);
+    if (cnt.c >= 5) {
+      socket.emit("join_result", { playerName, accepted: false, reason: "team_full" });
+      return;
+    }
+
+    try {
+      db.prepare("INSERT INTO join_requests (team_id, player_name) VALUES (?, ?)").run(team.id, playerName);
+    } catch (e) {
+      // ignore duplicate
+    }
+
+    // Acknowledge to applicant and notify captains (client will filter by team)
+    socket.emit("join_request_ack", { teamId: team.id, teamName: team.name });
+    io.emit("join_request", { teamId: team.id, teamName: team.name, playerName });
+  });
+
+  // Captain fetches pending requests for their team
+  socket.on("captain_list_requests", () => {
+    const playerName = socket.data.playerName;
+    if (!playerName) return;
+    const cap = db.prepare("SELECT is_creator, team_id FROM players WHERE name = ?").get(playerName);
+    if (!cap || !cap.is_creator || !cap.team_id) return;
+    const items = db
+      .prepare("SELECT player_name, created_at FROM join_requests WHERE team_id = ? ORDER BY created_at ASC")
+      .all(cap.team_id);
+    socket.emit("join_requests", { teamId: cap.team_id, items });
+  });
+
+  // Captain decision on a pending request
+  socket.on("captain_decide_join", ({ playerName: applicantName, accept }) => {
+    const captainName = socket.data.playerName;
+    if (!captainName || !applicantName) return;
+    const cap = db.prepare("SELECT is_creator, team_id FROM players WHERE name = ?").get(captainName);
+    if (!cap || !cap.is_creator || !cap.team_id) return;
+
+    const req = db
+      .prepare("SELECT id FROM join_requests WHERE team_id = ? AND player_name = ?")
+      .get(cap.team_id, applicantName);
+    if (!req) return;
+
+    if (!accept) {
+      db.prepare("DELETE FROM join_requests WHERE id = ?").run(req.id);
+      io.emit("join_result", { playerName: applicantName, accepted: false, teamId: cap.team_id, reason: "rejected" });
+      const items = db
+        .prepare("SELECT player_name, created_at FROM join_requests WHERE team_id = ? ORDER BY created_at ASC")
+        .all(cap.team_id);
+      socket.emit("join_requests", { teamId: cap.team_id, items });
+      return;
+    }
+
+    // Accept: ensure applicant still unassigned and capacity available
+    const applicant = db.prepare("SELECT team_id FROM players WHERE name = ?").get(applicantName);
+    if (!applicant || applicant.team_id) {
+      db.prepare("DELETE FROM join_requests WHERE id = ?").run(req.id);
+      io.emit("join_result", { playerName: applicantName, accepted: false, teamId: cap.team_id, reason: "stale" });
+      const items = db
+        .prepare("SELECT player_name, created_at FROM join_requests WHERE team_id = ? ORDER BY created_at ASC")
+        .all(cap.team_id);
+      socket.emit("join_requests", { teamId: cap.team_id, items });
+      return;
+    }
+    const cnt2 = db.prepare("SELECT COUNT(*) as c FROM players WHERE team_id = ?").get(cap.team_id);
+    if (cnt2.c >= 5) {
+      db.prepare("DELETE FROM join_requests WHERE id = ?").run(req.id);
+      io.emit("join_result", { playerName: applicantName, accepted: false, teamId: cap.team_id, reason: "team_full" });
+      const items = db
+        .prepare("SELECT player_name, created_at FROM join_requests WHERE team_id = ? ORDER BY created_at ASC")
+        .all(cap.team_id);
+      socket.emit("join_requests", { teamId: cap.team_id, items });
+      return;
+    }
+    // Assign and cleanup
+    db.prepare("UPDATE players SET team_id = ? WHERE name = ?").run(cap.team_id, applicantName);
+    db.prepare("DELETE FROM join_requests WHERE id = ?").run(req.id);
+
+    io.emit("teams_update", utils.getAllTeams(db));
+    io.emit("join_result", { playerName: applicantName, accepted: true, teamId: cap.team_id });
+    if (utils.isGameStarted(db)) {
+      io.emit("questions_payload_for", {
+        playerName: applicantName,
+        questions: utils.getQuestionsPublic(db),
+        game: utils.getGameState(db),
+      });
+    }
+    const items = db
+      .prepare("SELECT player_name, created_at FROM join_requests WHERE team_id = ? ORDER BY created_at ASC")
+      .all(cap.team_id);
+    socket.emit("join_requests", { teamId: cap.team_id, items });
+  });
   });
 };

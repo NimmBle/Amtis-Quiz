@@ -32,6 +32,15 @@ CREATE TABLE IF NOT EXISTS answers (
   answer TEXT
 );
 
+-- Pending team join approvals
+CREATE TABLE IF NOT EXISTS join_requests (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  team_id INTEGER NOT NULL,
+  player_name TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(team_id, player_name)
+);
+
 -- Track per-team hint usage per question
 CREATE TABLE IF NOT EXISTS hints (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
