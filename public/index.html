@@ -60,9 +60,9 @@
           <span>Оставащи подсказки: <strong id="hintsLeft">0</strong></span>
           <button id="getHintBtn" class="btn">Нужна ми е подсказка</button>
         </div>
-        <div id="finishedNotice" style="display:none; margin-top:8px; color:#0a0;">
-         Страхотна работа! Ти се справи с всички загадки безупречно!
-        </div>
+      </div>
+      <div id="finishedNotice" style="display:none; margin-top:8px; color:#0a0;">
+         <!-- Страхотна работа! Ти се справи с всички загадки безупречно! -->
       </div>
     </div>
 
@@ -164,12 +164,13 @@
           finishedNotice.style.display = 'block';
           finishedNotice.innerHTML = `
             <div style="text-align:center;">
-              <img src="/images/congrats.png" alt="congrats" style="max-width:300px; margin-bottom:20px;"/>
+              <img src="https://cdn.az-moga.bg/up/2017/zebra.png" alt="congrats" style="max-width:300px; margin-bottom:20px;"/>
               <h2 style="color:#28a745;">🎉 Браво, приключи мисията успешно! 🎉</h2>
               <p style="font-size:18px; color:#333;">Ти и твоят отбор показахте невероятна логика, бързина и работа в екип.</p>
               <p style="font-size:16px; color:#666;">Очаквай следващото приключение съвсем скоро!</p>
             </div>
           `;
+          // location.reload();
           return;
         }
         const colors = ['#0e1a2a', '#ff8900', '#0657a4','#fff', '#349a47', '#d71724', '#d71724'];
@@ -306,8 +307,13 @@
           answerInput.style.borderWidth = '2px';
           return;
         }
+        else {
+          answerInput.style.borderColor = 'grey';
+          answerInput.style.borderWidth = '2px';
+          answerInput.value = '';
+        }
         // correct: optionally clear input; next question renders from teams_update
-        answerInput.value = '';
+        
       });
 
       // Hints: request and update
@@ -415,7 +421,7 @@
         if (teamName && pendingJoinFor === teamName) {
           joinPending.style.display = '';
           joinPending.textContent = `Join request for ${teamName} pending approval…`;
-          joinBtn.disabled = "disabled";
+          // joinBtn.disabled = "disabled";
         }
       });
 

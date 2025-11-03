@@ -41,6 +41,8 @@ const getAnswers = (db) =>
 
 const getGameState = (db) => db.prepare("SELECT * FROM game_state WHERE id = 1").get();
 
+const getUsedHints = (db) => db.prepare("SELECT id, team_id, question_id, created_at FROM hints")
+
 const isGameStarted = (db) => {
   const s = getGameState(db);
   return !!(s && s.started);
@@ -69,6 +71,7 @@ const sendAdminState = (io, db, target) => {
     answers: getAnswers(db),
     game: getGameState(db),
     max_hints: getMaxHints(db),
+    used_hints: getUsedHints(db)
   };
   if (target && typeof target.emit === "function") {
     target.emit("admin_state", payload);

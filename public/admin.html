@@ -66,20 +66,22 @@
       const maxHintsMsg = document.getElementById('maxHintsMsg');
       const addQBtn = document.getElementById('addQBtn');
       const questionsList = document.getElementById('questionsList');
-      let state = { teams: [], questions: [], answers: [], game: null, max_hints: 3 };
+      let state = { teams: [], questions: [], answers: [], game: null, max_hints: 3, used_hints: [] };
       function renderGame() {
         const g = state.game || { started: 0, ended: 0 };
         gameStateSpan.textContent = `Started: ${g.started ? 'yes' : 'no'} | Ended: ${g.ended ? 'yes' : 'no'}`;
       }
-            function renderTeams() {
+      function renderTeams() {
         teamsTableHead.innerHTML = '';
         const headRow = document.createElement('tr');
         const thTeam = document.createElement('th');
         thTeam.textContent = 'Team';
         headRow.appendChild(thTeam);
+
         const thPlayers = document.createElement('th');
         thPlayers.textContent = 'Players';
         headRow.appendChild(thPlayers);
+
         state.questions.forEach((q, idx) => {
           const th = document.createElement('th');
           th.textContent = `Q${idx + 1}`;
@@ -89,6 +91,10 @@
         thActions.textContent = 'Actions';
         headRow.appendChild(thActions);
         teamsTableHead.appendChild(headRow);
+
+        const thHintsUsed = document.createElement('th');
+        thHintsUsed.textContent = 'Hints Used';
+        headRow.appendChild(thHintsUsed);
 
         const answersMap = new Map();
         state.answers.forEach((a) => {
@@ -128,6 +134,14 @@
           delBtn.onclick = () => { if (confirm(`Delete team ${t.name}?`)) socket.emit('admin_delete_team', t.id); };
           tdActions.appendChild(delBtn);
           tr.appendChild(tdActions);
+          
+          // const tdHintUsed = document.createElement('td');
+          // let hintsUsed = 0;
+          // state.used_hints.forEach((h => {
+          //   if (h.team_id == t.id) hintsUsed++
+          // }))
+          // tdHintUsed.textContext = hintsUsed
+          // tr.appendChild(tdHintUsed);
 
           teamsTableBody.appendChild(tr);
         });

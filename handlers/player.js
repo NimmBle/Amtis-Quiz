@@ -53,6 +53,7 @@
         .prepare("INSERT INTO teams (name) VALUES (?)")
         .run(teamName);
       const teamId = result.lastInsertRowid;
+      // db.prepare("UPDATE teams SET creator_name = ? WHERE id = ?").run(playerName, teamId);
       if (gameStarted) {
         db.prepare("UPDATE teams SET current_question = 1 WHERE id = ?").run(teamId);
       }
@@ -229,6 +230,7 @@
       // already took a hint for this question; still emit state
       const hs = utils.getTeamHintsState(db, team.id);
       socket.emit("hints_state", hs);
+      utils.sendAdminState(io, db)
       return;
     }
     db.prepare("INSERT INTO hints (team_id, question_id) VALUES (?, ?)").run(
@@ -364,3 +366,4 @@
   });
   });
 };
+

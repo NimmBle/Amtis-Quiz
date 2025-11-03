@@ -14,7 +14,8 @@ CREATE TABLE IF NOT EXISTS players (
 CREATE TABLE IF NOT EXISTS teams (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT UNIQUE,
-  current_question INTEGER DEFAULT 0
+  current_question INTEGER DEFAULT 0,
+  creator_name TEXT
 );
 
 CREATE TABLE IF NOT EXISTS questions (
@@ -67,6 +68,19 @@ CREATE TABLE IF NOT EXISTS admin_config (
 INSERT OR IGNORE INTO admin_config (id, code) VALUES (1, NULL);
 `);
 
+// const teamColumns = db.prepare("PRAGMA table_info(teams)").all();
+// const hasCreatorName = teamColumns.some(c => c.name === "creator_name");
+// if (!hasCreatorName) {
+//   db.exec(`
+//     ALTER TABLE teams ADD COLUMN creator_name TEXT;
+//   `);
+//   db.exec(`
+//     UPDATE teams
+//     SET creator_name = (
+//       SELECT name FROM players WHERE team_id = teams.id AND is_creator = 1 LIMIT 1
+//     )
+//   `);
+// }
 const columns = db.prepare("PRAGMA table_info(questions)").all();
 const hasPosition = columns.some(c => c.name === 'position');
 if (!hasPosition) {
@@ -114,3 +128,6 @@ db.exec(`
 `);
 
 module.exports = db;
+
+
+
