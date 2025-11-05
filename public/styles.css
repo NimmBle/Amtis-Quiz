@@ -18,7 +18,7 @@
 /*html, body { height: 100%; }*/
 body {
   margin: 0;
-  padding-top: 150px;
+  padding-top: 100px;
   padding-inline: var(--space-4);
   background: var(--bg);
   color: var(--text);
@@ -105,6 +105,10 @@ th, td { border: 1px solid var(--border); padding: 8px 10px; text-align: left; }
 
 img { max-width: 100%; height: auto; }
 
+#qImageEl { 
+  width: 100%;
+}
+#qTextEl { white-space: pre-wrap; }
 .d-f-fd-c {
   display: flex;
   flex-direction: column;

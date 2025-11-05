@@ -59,31 +59,68 @@ module.exports = function registerAdminHandlers(io, db, socket, utils) {
     }
   });
 
-  socket.on("admin_add_question", ({ image_url, text, hint, correct_answer }) => {
+  socket.on("admin_add_question", (payload = {}) => {
     if (!socket.data.isAdmin) return;
+    const { image_url, text, hint } = payload;
     const cleanHint = (hint ?? "").toString().trim();
-    const cleanAnswer = (correct_answer ?? "").toString().trim();
     if (!cleanHint) {
       socket.emit("admin_error", "Hint is required for each question");
       return;
     }
-    if (!cleanAnswer) {
-      socket.emit("admin_error", "Correct answer is required for each question");
+
+    const rawAnswers = Array.isArray(payload.answers)
+      ? payload.answers
+      : [payload.correct_answer];
+    const seen = new Set();
+    const answers = (rawAnswers ?? [])
+      .map((val) => (val ?? "").toString().trim())
+      .filter((val) => {
+        const key = val.toLowerCase();
+        if (!val || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+
+    if (!answers.length) {
+      socket.emit("admin_error", "At least one correct answer is required");
       return;
     }
+
     const maxPosRow = db
       .prepare("SELECT COALESCE(MAX(position), 0) AS maxp FROM questions")
       .get();
     const nextPos = (maxPosRow?.maxp || 0) + 1;
-    db.prepare(
-      "INSERT INTO questions (image_url, text, hint, correct_answer, position) VALUES (?, ?, ?, ?, ?)"
-    ).run(image_url || null, text || null, cleanHint, cleanAnswer, nextPos);
-    io.to("admins").emit("questions_update", utils.getQuestions(db));
-    utils.sendAdminState(io, db);
+
+    try {
+      const insertQuestion = db.prepare(
+        "INSERT INTO questions (image_url, text, hint, correct_answer, position) VALUES (?, ?, ?, ?, ?)"
+      );
+      const insertAnswer = db.prepare(
+        "INSERT INTO question_answers (question_id, answer) VALUES (?, ?)"
+      );
+      const run = db.transaction(() => {
+        const result = insertQuestion.run(
+          image_url || null,
+          text || null,
+          cleanHint,
+          answers[0],
+          nextPos
+        );
+        const qId = result.lastInsertRowid;
+        answers.forEach((ans) => insertAnswer.run(qId, ans));
+        return qId;
+      });
+      run();
+      io.to("admins").emit("questions_update", utils.getQuestions(db));
+      utils.sendAdminState(io, db);
+    } catch (e) {
+      socket.emit("admin_error", "Failed to add question");
+    }
   });
 
   socket.on("admin_remove_question", (id) => {
     if (!socket.data.isAdmin) return;
+    db.prepare("DELETE FROM question_answers WHERE question_id = ?").run(id);
     db.prepare("DELETE FROM questions WHERE id = ?").run(id);
     const rows = db
       .prepare("SELECT id FROM questions ORDER BY position ASC, id ASC")
@@ -142,23 +179,75 @@ module.exports = function registerAdminHandlers(io, db, socket, utils) {
       .get(id);
     if (!curr) return;
     const image_url =
-      payload.hasOwnProperty("image_url") ? payload.image_url : curr.image_url;
-    const text = payload.hasOwnProperty("text") ? payload.text : curr.text;
-    const hint = payload.hasOwnProperty("hint") ? payload.hint : curr.hint;
-    const correct_answer = payload.hasOwnProperty("correct_answer")
-      ? payload.correct_answer
-      : curr.correct_answer;
+      Object.prototype.hasOwnProperty.call(payload, "image_url")
+        ? payload.image_url
+        : curr.image_url;
+    const text = Object.prototype.hasOwnProperty.call(payload, "text")
+      ? payload.text
+      : curr.text;
+    const hint = Object.prototype.hasOwnProperty.call(payload, "hint")
+      ? payload.hint
+      : curr.hint;
     const cleanHint = (hint ?? "").toString().trim();
-    const cleanAnswer = (correct_answer ?? "").toString().trim();
-    if (!cleanHint || !cleanAnswer) {
-      socket.emit("admin_error", "Hint and correct answer are required");
+    if (!cleanHint) {
+      socket.emit("admin_error", "Hint is required");
       return;
     }
-    db.prepare(
-      "UPDATE questions SET image_url = ?, text = ?, hint = ?, correct_answer = ? WHERE id = ?"
-    ).run(image_url || null, text || null, cleanHint, cleanAnswer, id);
-    io.to("admins").emit("questions_update", utils.getQuestions(db));
-    utils.sendAdminState(io, db);
+
+    let answersList = null;
+    if (Object.prototype.hasOwnProperty.call(payload, "answers") || Object.prototype.hasOwnProperty.call(payload, "correct_answer")) {
+      const rawAnswers = Array.isArray(payload.answers)
+        ? payload.answers
+        : [payload.correct_answer];
+      const seen = new Set();
+      answersList = (rawAnswers ?? [])
+        .map((val) => (val ?? "").toString().trim())
+        .filter((val) => {
+          const key = val.toLowerCase();
+          if (!val || seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+      if (!answersList.length) {
+        socket.emit("admin_error", "At least one correct answer is required");
+        return;
+      }
+    }
+
+    const firstAnswer =
+      answersList && answersList.length
+        ? answersList[0]
+        : curr.correct_answer;
+
+    try {
+      const updateQuestion = db.prepare(
+        "UPDATE questions SET image_url = ?, text = ?, hint = ?, correct_answer = ? WHERE id = ?"
+      );
+      const replaceAnswers = answersList
+        ? db.transaction(() => {
+            db.prepare("DELETE FROM question_answers WHERE question_id = ?").run(
+              id
+            );
+            const insert = db.prepare(
+              "INSERT INTO question_answers (question_id, answer) VALUES (?, ?)"
+            );
+            answersList.forEach((ans) => insert.run(id, ans));
+          })
+        : null;
+
+      updateQuestion.run(
+        image_url || null,
+        text || null,
+        cleanHint,
+        firstAnswer || null,
+        id
+      );
+      if (replaceAnswers) replaceAnswers();
+      io.to("admins").emit("questions_update", utils.getQuestions(db));
+      utils.sendAdminState(io, db);
+    } catch (e) {
+      socket.emit("admin_error", "Failed to update question");
+    }
   });
 
   socket.on("admin_delete_team", (teamId) => {

@@ -33,6 +33,13 @@ CREATE TABLE IF NOT EXISTS answers (
   answer TEXT
 );
 
+CREATE TABLE IF NOT EXISTS question_answers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  question_id INTEGER NOT NULL,
+  answer TEXT NOT NULL,
+  UNIQUE(question_id, answer),
+  FOREIGN KEY (question_id) REFERENCES questions(id) ON DELETE CASCADE
+);
 -- Pending team join approvals
 CREATE TABLE IF NOT EXISTS join_requests (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -67,6 +74,33 @@ CREATE TABLE IF NOT EXISTS admin_config (
 
 INSERT OR IGNORE INTO admin_config (id, code) VALUES (1, NULL);
 `);
+
+const normalizeAnswerList = (value) => {
+  if (value == null) return [];
+  return value
+    .toString()
+    .split(/\r?\n|\\n|,/)
+    .map((part) => part.trim())
+    .filter((part, index, arr) => part.length > 0 && arr.indexOf(part) === index);
+};
+
+const insertAnswerStmt = db.prepare(
+  "INSERT OR IGNORE INTO question_answers (question_id, answer) VALUES (?, ?)"
+);
+const deleteAnswerByIdStmt = db.prepare("DELETE FROM question_answers WHERE id = ?");
+const countAnswersStmt = db.prepare(
+  "SELECT COUNT(*) as c FROM question_answers WHERE question_id = ?"
+);
+
+const existingAnswerRows = db
+  .prepare("SELECT id, question_id, answer FROM question_answers")
+  .all();
+existingAnswerRows.forEach((row) => {
+  const splits = normalizeAnswerList(row.answer);
+  if (splits.length <= 1) return;
+  deleteAnswerByIdStmt.run(row.id);
+  splits.forEach((ans) => insertAnswerStmt.run(row.question_id, ans));
+});
 
 const teamColumns = db.prepare("PRAGMA table_info(teams)").all();
 const hasCreatorName = teamColumns.some(c => c.name === "creator_name");
@@ -106,6 +140,18 @@ if (!hasCorrect) {
   `);
 }
 
+const questionsWithAnswers = db
+  .prepare(
+    "SELECT id, correct_answer FROM questions WHERE correct_answer IS NOT NULL AND TRIM(correct_answer) <> ''"
+  )
+  .all();
+questionsWithAnswers.forEach((q) => {
+  const existing = countAnswersStmt.get(q.id);
+  if (existing && existing.c > 0) return;
+  const splits = normalizeAnswerList(q.correct_answer);
+  splits.forEach((ans) => insertAnswerStmt.run(q.id, ans));
+});
+
 // Ensure players.external_id exists
 const pcols = db.prepare("PRAGMA table_info(players)").all();
 const hasExternalId = pcols.some(c => c.name === 'external_id');
@@ -128,5 +174,3 @@ db.exec(`
 `);
 
 module.exports = db;
-
-

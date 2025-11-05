@@ -24,7 +24,7 @@
     <div id="teamSection" style="display:none;">
       <div id="welcomeHeader" class="welcome-header">
         <h3>
-          Хей, куестър <span id="playerName" class="accent-word"></span>!
+          Хей, <span id="playerName" class="accent-word"></span>!
         </h3>
         <button id="leaveBtn" class="btn--leave" style="display:none;">Напусни отбора</button>
       </div>
@@ -41,7 +41,7 @@
       </div>
 
       <div id="currentTeamSection" class="your-team" style="display:none;">
-        <h4>Твоят отбор: <span id="currentTeamName"></span></h4>
+        <h4>Твоят отбор е: <span id="currentTeamName"></span></h4>
         <ul id="memberList"></ul>
       </div>
 
@@ -53,7 +53,7 @@
           <p id="qHintEl" style="display:none; color:#555;"></p>
         </div>
         <div class="d-f-fd-c answer-holder">
-          <input id="answerInput" class="input" placeholder="Your answer" />
+          <input id="answerInput" class="input" placeholder="Вашият отговор:" />
           <button id="submitAnswerBtn" class="btn btn--primary btn--submit">Дали познах?</button>
         </div>
         <div id="hintControls" class="d-f-fd-c hint-controls" style="margin-top:8px;">
@@ -108,6 +108,10 @@
           alert("Please enter both your name and ID.");
           return;
         }
+        if (!/^\d{6}$/.test(extId)) {
+          alert("ID must be exactly 6 digits.");
+          return;
+        }
         try { localStorage.setItem("externalId", extId); } catch {}
         socket.emit("join_player", { name, external_id: extId });
       };
@@ -137,6 +141,10 @@
       });
 
       socket.on("name_taken", () => alert("Name already taken!"));
+      socket.on("invalid_external_id", () => {
+        alert("ID must be exactly 6 digits.");
+        try { localStorage.removeItem("externalId"); } catch {}
+      });
       socket.on("resume_failed", () => {
         try { localStorage.removeItem("playerName"); } catch {}
       });
@@ -165,15 +173,13 @@
           finishedNotice.innerHTML = `
             <div style="text-align:center;">
               <img src="https://cdn.az-moga.bg/up/2017/zebra.png" alt="congrats" style="max-width:300px; margin-bottom:20px;"/>
-              <h2 style="color:#28a745;">🎉 Браво, приключи мисията успешно! 🎉</h2>
+              <h2 style="color:#28a745;">Поздравления! Справихте се отлично със загадките! 🎉</h2>
               <p style="font-size:18px; color:#333;">Ти и твоят отбор показахте невероятна логика, бързина и работа в екип.</p>
-              <p style="font-size:16px; color:#666;">Очаквай следващото приключение съвсем скоро!</p>
             </div>
           `;
-          // location.reload();
           return;
         }
-        const colors = ['#0e1a2a', '#ff8900', '#0657a4','#fff', '#349a47', '#d71724', '#d71724'];
+        const colors = ['#0e1a2a', '#ff8900', '#0657a4', '#000', '#349a47', '#d71724', '#ff8900', '#0657a4','#349a47', '#000'];
         const color = colors[(pos - 1) % colors.length];
         submitAnswerBtn.style.backgroundColor = color;
         gameSectionHeading.style.color = color;
@@ -433,7 +439,7 @@
           if (reason === 'team_full') alert('Team full');
           else if (reason === 'rejected') alert('Join request rejected');
           else if (reason === 'stale') alert('Join request no longer valid');
-          else if (reason === 'already_in_team') alert('You are already in a team');
+          // else if (reason === 'already_in_team') alert('You are already in a team');
         }
       });
 
@@ -453,7 +459,7 @@
           panel.id = panelId;
           panel.className = 'mt-3';
           const h = document.createElement('h4');
-          h.textContent = 'Pending join requests';
+          h.textContent = 'Чакащи одобрение: ';
           const ul = document.createElement('ul');
           ul.id = listId;
           panel.appendChild(h);

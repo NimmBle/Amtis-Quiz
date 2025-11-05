@@ -20,12 +20,37 @@ const getAllTeams = (db) => {
   });
 };
 
-const getQuestions = (db) =>
-  db
+const splitStoredAnswers = (value) => {
+  if (value == null) return [];
+  return value
+    .toString()
+    .split(/\r?\n|,/)
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+};
+
+const getQuestions = (db) => {
+  const rows = db
     .prepare(
       "SELECT id, image_url, text, hint, correct_answer, position FROM questions ORDER BY position ASC, id ASC"
     )
     .all();
+  const answerRows = db
+    .prepare("SELECT question_id, answer FROM question_answers ORDER BY question_id ASC, id ASC")
+    .all();
+  const grouped = new Map();
+  answerRows.forEach(({ question_id, answer }) => {
+    if (!grouped.has(question_id)) grouped.set(question_id, []);
+    const bucket = grouped.get(question_id);
+    splitStoredAnswers(answer).forEach((ans) => {
+      if (!bucket.includes(ans)) bucket.push(ans);
+    });
+  });
+  return rows.map((row) => ({
+    ...row,
+    answers: grouped.get(row.id) || [],
+  }));
+};
 
 const getQuestionsPublic = (db) =>
   db

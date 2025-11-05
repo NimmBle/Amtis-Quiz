@@ -1,4 +1,19 @@
-﻿module.exports = function registerPlayerHandlers(io, db, socket, utils) {
+const sanitizeExternalId = (value) => {
+  if (value == null) return null;
+  const trimmed = value.toString().trim();
+  return /^\d{6}$/.test(trimmed) ? trimmed : null;
+};
+
+const splitAcceptableAnswers = (value) => {
+  if (value == null) return [];
+  return value
+    .toString()
+    .split(/\r?\n|\\n|,/)
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+};
+
+module.exports = function registerPlayerHandlers(io, db, socket, utils) {
   socket.on("resume", (playerName) => {
     if (!playerName) return;
     const player = db
@@ -21,17 +36,18 @@
 
   socket.on("join_player", (payload) => {
     const playerName = typeof payload === "string" ? payload : payload?.name;
-    const externalId = typeof payload === "object" && payload ? payload.external_id : null;
-    if (!playerName) return;
+    const externalId = sanitizeExternalId(
+      typeof payload === "object" && payload ? payload.external_id : null
+    );
+    if (!playerName || !externalId) {
+      socket.emit("invalid_external_id");
+      return;
+    }
     try {
-      if (externalId != null) {
-        db.prepare("INSERT INTO players (name, external_id) VALUES (?, ?)").run(
-          playerName,
-          externalId
-        );
-      } else {
-        db.prepare("INSERT INTO players (name) VALUES (?)").run(playerName);
-      }
+      db.prepare("INSERT INTO players (name, external_id) VALUES (?, ?)").run(
+        playerName,
+        externalId
+      );
       socket.data.playerName = playerName;
       socket.emit("joined_as_player", playerName);
       io.emit("teams_update", utils.getAllTeams(db));
@@ -53,7 +69,7 @@
         .prepare("INSERT INTO teams (name) VALUES (?)")
         .run(teamName);
       const teamId = result.lastInsertRowid;
-      // db.prepare("UPDATE teams SET creator_name = ? WHERE id = ?").run(playerName, teamId);
+      db.prepare("UPDATE teams SET creator_name = ? WHERE id = ?").run(playerName, teamId);
       if (gameStarted) {
         db.prepare("UPDATE teams SET current_question = 1 WHERE id = ?").run(teamId);
       }
@@ -105,14 +121,11 @@
       playerName
     );
     if (existingCap) {
-      db.prepare("UPDATE players SET is_creator = 0 WHERE name = ?").run(
-        playerName
-      );
+      db.prepare("UPDATE players SET is_creator = 0 WHERE name = ?").run(playerName);
     } else {
       // No captain in this team; make the joiner captain
-      db.prepare("UPDATE players SET is_creator = 1 WHERE name = ?").run(
-        playerName
-      );
+      db.prepare("UPDATE players SET is_creator = 1 WHERE name = ?").run(playerName);
+      db.prepare("UPDATE teams SET creator_name = ? WHERE id = ?").run(playerName, team.id);
     }
     io.emit("teams_update", utils.getAllTeams(db));
     if (gameStarted) {
@@ -129,11 +142,15 @@
       return;
     }
     const row = db
-      .prepare("SELECT team_id FROM players WHERE name = ?")
+      .prepare("SELECT team_id, is_creator FROM players WHERE name = ?")
       .get(playerName);
     const teamId = row ? row.team_id : null;
+    const wasCaptain = row ? !!row.is_creator : false;
     db.prepare("UPDATE players SET team_id = NULL, is_creator = 0 WHERE name = ?").run(playerName);
     if (teamId) {
+      if (wasCaptain) {
+        db.prepare("UPDATE teams SET creator_name = ? WHERE id = ?").run(playerName, teamId);
+      }
       const count = db
         .prepare("SELECT COUNT(*) as c FROM players WHERE team_id = ?")
         .get(teamId);
@@ -165,10 +182,19 @@
       .prepare("SELECT id, correct_answer FROM questions WHERE position = ?")
       .get(currentPosition);
     if (!qRow) return;
+    const answerRows = db
+      .prepare("SELECT answer FROM question_answers WHERE question_id = ?")
+      .all(qRow.id);
     const normalize = (s) => (s ?? "").toString().trim().toLowerCase().replace(/\s+/g, " ");
     const given = normalize(answer);
-    const correct = normalize(qRow.correct_answer);
-    if (given && correct && given === correct) {
+    const acceptable = new Set();
+    answerRows.forEach((row) => {
+      splitAcceptableAnswers(row.answer).forEach((ans) => acceptable.add(normalize(ans)));
+    });
+    if (!answerRows.length) {
+      splitAcceptableAnswers(qRow.correct_answer).forEach((ans) => acceptable.add(normalize(ans)));
+    }
+    if (given && acceptable.has(given)) {
       db.prepare(
         "INSERT INTO answers (team_id, question_id, answer) VALUES (?, ?, ?)"
       ).run(team.id, qRow.id, answer);
@@ -260,7 +286,7 @@
   socket.on("request_join_team", (teamName) => {
     const playerName = socket.data.playerName;
     if (!playerName || !teamName) return;
-    const team = db.prepare("SELECT id, name FROM teams WHERE name = ?").get(teamName);
+    const team = db.prepare("SELECT id, name, creator_name FROM teams WHERE name = ?").get(teamName);
     if (!team) return;
 
     // Must be unassigned
@@ -273,6 +299,34 @@
     const cnt = db.prepare("SELECT COUNT(*) as c FROM players WHERE team_id = ?").get(team.id);
     if (cnt.c >= 5) {
       socket.emit("join_result", { playerName, accepted: false, reason: "team_full" });
+      return;
+    }
+
+    const isFormerCaptain = team.creator_name && team.creator_name === playerName;
+    if (isFormerCaptain) {
+      const existingCaptain = db
+        .prepare("SELECT 1 FROM players WHERE team_id = ? AND is_creator = 1 LIMIT 1")
+        .get(team.id);
+      db.prepare("UPDATE players SET team_id = ?, is_creator = ? WHERE name = ?").run(
+        team.id,
+        existingCaptain ? 0 : 1,
+        playerName
+      );
+      if (!existingCaptain) {
+        db.prepare("UPDATE teams SET creator_name = ? WHERE id = ?").run(playerName, team.id);
+      }
+      db.prepare("DELETE FROM join_requests WHERE team_id = ? AND player_name = ?").run(team.id, playerName);
+      io.emit("teams_update", utils.getAllTeams(db));
+      io.emit("join_result", { playerName, accepted: true, teamId: team.id });
+      if (utils.isGameStarted(db)) {
+        io.emit("questions_payload_for", {
+          playerName,
+          questions: utils.getQuestionsPublic(db),
+          game: utils.getGameState(db),
+        });
+        socket.emit("hints_state", utils.getTeamHintsState(db, team.id));
+      }
+      utils.sendAdminState(io, db);
       return;
     }
 
@@ -362,4 +416,5 @@
   });
   });
 };
+
 

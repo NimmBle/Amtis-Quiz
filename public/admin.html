@@ -37,7 +37,7 @@
             <input id="qImage" class="input w-30" placeholder="Image URL" />
             <input id="qText" class="input w-22" placeholder="Question text" />
             <input id="qHint" class="input w-22" placeholder="Hint (required)" />
-            <input id="qAnswer" class="input w-22" placeholder="Correct Answer (required)" />
+            <textarea id="qAnswers" class="input w-22" placeholder="Correct answers (one per line)" rows="1"></textarea>
             <button id="addQBtn" class="btn btn--primary">Add</button>
           </div>
         </div>
@@ -60,13 +60,33 @@
       const qImage = document.getElementById('qImage');
       const qText = document.getElementById('qText');
       const qHint = document.getElementById('qHint');
-      const qAnswer = document.getElementById('qAnswer');
+      const qAnswers = document.getElementById('qAnswers');
+      qAnswers.addEventListener('input', () => adjustTextareaRows(qAnswers));
       const maxHintsInput = document.getElementById('maxHintsInput');
       const saveMaxHintsBtn = document.getElementById('saveMaxHintsBtn');
       const maxHintsMsg = document.getElementById('maxHintsMsg');
       const addQBtn = document.getElementById('addQBtn');
       const questionsList = document.getElementById('questionsList');
       let state = { teams: [], questions: [], answers: [], game: null, max_hints: 3, used_hints: [] };
+
+      const parseAnswersInput = (value) => {
+        const seen = new Set();
+        return (value || '')
+          .split(/\r?\n|\\n|,/)
+          .map((val) => val.trim())
+          .filter((val) => {
+            const key = val.toLowerCase();
+            if (!val || seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
+      };
+
+      const adjustTextareaRows = (el) => {
+        if (!el) return;
+        const count = parseAnswersInput(el.value).length || 1;
+        el.rows = Math.min(6, Math.max(1, count));
+      };
       function renderGame() {
         const g = state.game || { started: 0, ended: 0 };
         gameStateSpan.textContent = `Started: ${g.started ? 'yes' : 'no'} | Ended: ${g.ended ? 'yes' : 'no'}`;
@@ -171,15 +191,19 @@
           hintInput.classList.add('w-22');
           hintInput.value = q.hint || '';
           hintInput.disabled = true;
-          const ansInput = document.createElement('input');
-          ansInput.className = 'input';
-          ansInput.placeholder = 'Correct Answer (required)';
-          ansInput.classList.add('w-22');
-          ansInput.value = q.correct_answer || '';
-          ansInput.disabled = true;
-          const ansSpan = document.createElement('div');
-          ansSpan.textContent = q.correct_answer ? `Answer: ${q.correct_answer}` : 'Answer: (missing)';
-          ansSpan.style.color = q.correct_answer ? '#555' : '#b00';
+          const answersArea = document.createElement('textarea');
+          answersArea.className = 'input';
+          answersArea.placeholder = 'Correct answers (one per line)';
+          answersArea.classList.add('w-22');
+          const answerList = Array.isArray(q.answers) && q.answers.length
+            ? q.answers
+            : (q.correct_answer ? [q.correct_answer] : []);
+          answersArea.value = answerList.join('\n');
+          answersArea.disabled = true;
+          answersArea.rows = Math.min(6, Math.max(1, answerList.length || 1));
+          answersArea.style.resize = 'vertical';
+          adjustTextareaRows(answersArea);
+          answersArea.addEventListener('input', () => adjustTextareaRows(answersArea));
           const upBtn = document.createElement('button');
           upBtn.className = 'btn';
           upBtn.textContent = 'Up';
@@ -202,8 +226,9 @@
             imgInput.disabled = !on;
             textInput.disabled = !on;
             hintInput.disabled = !on;
-            ansInput.disabled = !on;
+            answersArea.disabled = !on;
             editSaveBtn.textContent = on ? 'Save' : 'Edit';
+            if (on) adjustTextareaRows(answersArea);
           };
           editSaveBtn.onclick = () => {
             if (!editing) {
@@ -213,9 +238,9 @@
             const image_url = imgInput.value.trim();
             const text = textInput.value.trim();
             const hint = hintInput.value.trim();
-            const correct_answer = ansInput.value.trim();
-            if (!hint || !correct_answer) { alert('Hint and Correct Answer are required'); return; }
-            socket.emit('admin_update_question', { id: q.id, image_url, text, hint, correct_answer });
+            const answers = parseAnswersInput(answersArea.value);
+            if (!hint || !answers.length) { alert('Hint and at least one answer are required'); return; }
+            socket.emit('admin_update_question', { id: q.id, image_url, text, hint, answers });
             setEditing(false);
           };
           const removeBtn = document.createElement('button');
@@ -226,7 +251,7 @@
           line.appendChild(imgInput);
           line.appendChild(textInput);
           line.appendChild(hintInput);
-          line.appendChild(ansInput);
+          line.appendChild(answersArea);
           line.appendChild(upBtn);
           line.appendChild(downBtn);
           line.appendChild(editSaveBtn);
@@ -263,14 +288,15 @@
         const image_url = qImage.value.trim();
         const text = qText.value.trim();
         const hint = qHint.value.trim();
-        const correct_answer = qAnswer.value.trim();
+        const answers = parseAnswersInput(qAnswers.value);
         if (!hint) { alert('Hint is required'); return; }
-        if (!correct_answer) { alert('Correct answer is required'); return; }
-        socket.emit('admin_add_question', { image_url, text, hint, correct_answer });
+        if (!answers.length) { alert('At least one correct answer is required'); return; }
+        socket.emit('admin_add_question', { image_url, text, hint, answers });
         qImage.value = '';
         qText.value = '';
         qHint.value = '';
-        qAnswer.value = '';
+        qAnswers.value = '';
+        adjustTextareaRows(qAnswers);
       };
       socket.on('admin_logged_in', () => {
         loginDiv.style.display = 'none';
