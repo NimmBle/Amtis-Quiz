@@ -4,6 +4,9 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="stylesheet" href="/styles.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sofia+Sans:ital,wght@0,1..1000;1,1..1000&display=swap" rel="stylesheet">
     <title>Quiz</title>
   </head>
   <body>
@@ -56,7 +59,7 @@
           <input id="answerInput" class="input" placeholder="Вашият отговор:" />
           <button id="submitAnswerBtn" class="btn btn--primary btn--submit">Дали познах?</button>
         </div>
-        <div id="hintControls" class="d-f-fd-c hint-controls" style="margin-top:8px;">
+        <div id="hintControls" class="d-f-fd-c hint-controls">
           <span>Оставащи подсказки: <strong id="hintsLeft">0</strong></span>
           <button id="getHintBtn" class="btn">Нужна ми е подсказка</button>
         </div>
@@ -183,6 +186,7 @@
         const color = colors[(pos - 1) % colors.length];
         submitAnswerBtn.style.backgroundColor = color;
         gameSectionHeading.style.color = color;
+        gameSectionHeading.textContent = `Загадка ${pos}`;
         qImageEl.style.display = q.image_url ? 'block' : 'none';
         if (q.image_url) qImageEl.src = q.image_url;
         qTextEl.textContent = q.text || '';

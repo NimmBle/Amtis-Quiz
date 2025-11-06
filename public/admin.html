@@ -170,6 +170,7 @@
         questionsList.innerHTML = '';
         state.questions.forEach((q, idx) => {
           const li = document.createElement('li');
+          li.className = 'question-row';
           const line = document.createElement('div');
           line.className = 'row';
           // Inline editable inputs for question fields
