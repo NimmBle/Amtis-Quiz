@@ -186,6 +186,19 @@ header {
   }
 }
 
+.app-container {
+  width: 100%;
+  max-width: 400px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.app-container > * {
+  width: 100%;
+}
+
 /*register-page*/
 .register {
   width: 100%;
@@ -240,6 +253,19 @@ header {
     font-size: 20px;
     font-weight: bold;
   }
+}
+
+.name {
+    background: url(https://cdn.az-moga.bg/assets/all/logo-bg.jpg);
+    animation: logo 10s infinite;
+    animation-timing-function: linear;
+    background-size: 50%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    text-transform: uppercase;
+    color: transparent;
+    font-size: 26px;
+    margin: 0 auto;
 }
 
 .existing-teams {

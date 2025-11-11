@@ -11,10 +11,11 @@
   </head>
   <body>
     <header>
-      <img src="/images/logo-rtppp.jpg" alt="logo-az-moga">
-      <span> По стъпките на словото - Тайния шифър</span>
+      <!-- <img src="./images/logo-rtppp.jpg" alt="logo-az-moga"> -->
+      <span class="name">„Аз мога — тук и сега”</span>
     </header>
 
+    <main class="app-container">
     <div id="setup" class="d-f-fd-c register">
       <img src="/images/logo-quest.svg" alt="logo-az-moga-guest">
       <span class="register-heading">Време е за <span class="accent-word">мисия</span>!</span>
@@ -69,6 +70,8 @@
       </div>
     </div>
 
+    </main>
+
     <script src="/socket.io/socket.io.js"></script>
     <script>
       const socket = io();
@@ -108,11 +111,11 @@
         const name = document.getElementById("name").value.trim();
         const extId = document.getElementById("extId").value.trim();
         if (!name || !extId) {
-          alert("Please enter both your name and ID.");
+          alert("Моля, въведете име и ID.");
           return;
         }
         if (!/^\d{6}$/.test(extId)) {
-          alert("ID must be exactly 6 digits.");
+          alert("ID трябва да е точно 6 цифри.");
           return;
         }
         try { localStorage.setItem("externalId", extId); } catch {}
@@ -121,11 +124,11 @@
 
       document.getElementById("createTeamBtn").onclick = () => {
         const teamName = document.getElementById("teamName").value.trim();
-        if (!teamName) { alert("Please enter a team name"); return; }
+        if (!teamName) { alert("Моля, въведете име на отбор"); return; }
         // Client-side check for existing team name for instant feedback
         try {
           if ((lastTeams || []).some(t => (t.name || '').toLowerCase() === teamName.toLowerCase())) {
-            alert("Team name taken!");
+            alert("Името на отбора е заето!");
             return;
           }
         } catch {}
@@ -143,16 +146,16 @@
         socket.emit('player_get_info');
       });
 
-      socket.on("name_taken", () => alert("Name already taken!"));
+      socket.on("name_taken", () => alert("Името е заето!"));
       socket.on("invalid_external_id", () => {
-        alert("ID must be exactly 6 digits.");
+        alert("ID трябва да е точно 6 цифри.");
         try { localStorage.removeItem("externalId"); } catch {}
       });
       socket.on("resume_failed", () => {
         try { localStorage.removeItem("playerName"); } catch {}
       });
-      socket.on("name_taken", () => alert("Team name taken!"));
-      socket.on("team_full", () => alert("Team full!"));
+      socket.on("name_taken", () => alert("Името на отбора е заето!"));
+      socket.on("team_full", () => alert("Отборът е пълен!"));
 
       let lastTeams = [];
       let lastQuestions = [];
@@ -201,6 +204,11 @@
           qHintEl.style.display = 'none';
           qHintEl.textContent = '';
         }
+        {
+          const hintsLeftCount = (lastHints && typeof lastHints.left === 'number') ? lastHints.left : 0;
+          const alreadyHinted = Array.isArray(lastHints?.hintedQuestionIds) && lastHints.hintedQuestionIds.includes(q.id);
+          if (getHintBtn) getHintBtn.disabled = alreadyHinted ? true : (!isCreator || hintsLeftCount <= 0);
+        }
         // Do not request hints state here to avoid feedback loops
       }
       socket.on("teams_update", (teams) => {
@@ -214,8 +222,9 @@
         // Refresh captain status on any team change
         socket.emit('player_get_info');
 
-        // If the game is in progress, keep team UI hidden and focus on the question view
-        if (lastGame && lastGame.started) {
+        // If the game is in progress (or team already has a current question > 0),
+        // keep team UI hidden and focus on the question view
+        if ((lastGame && lastGame.started) || (currentTeam && Number(currentTeam.current_question) > 0)) {
           if (welcomeHeader) welcomeHeader.style.display = 'none';
           createTeamControls.style.display = 'none';
           existingTeams.style.display = 'none';
@@ -226,6 +235,8 @@
             socket.emit('captain_list_requests');
           }
           renderQuestion();
+          // Refresh hints state so the button reflects latest remaining hints
+          socket.emit('player_get_hints_state');
           return;
         }
 
@@ -281,7 +292,7 @@
         });
       });
 
-      socket.on("must_leave_first", () => alert("Leave your current team before joining another."));
+      socket.on("must_leave_first", () => alert("Първо напусни текущия си отбор, преди да се присъединиш към друг."));
 
       function setFrozenUI(isFrozen) {
         if (isFrozen) {
@@ -293,8 +304,15 @@
       socket.on("questions_payload", (payload) => {
         lastQuestions = payload.questions || [];
         lastGame = payload.game || null;
-        // Do not force-hide team UI here; teams_update will decide based on membership and game state
+        // Hide team UI and focus on the question view when questions load
+        if (welcomeHeader) welcomeHeader.style.display = 'none';
+        createTeamControls.style.display = 'none';
+        existingTeams.style.display = 'none';
+        currentTeamSection.style.display = 'none';
+        leaveBtn.style.display = 'none';
         renderQuestion();
+        // ensure hints counter/button are accurate right after receiving questions
+        socket.emit('player_get_hints_state');
       });
 
       // Targeted questions payload after captain approves
@@ -302,7 +320,15 @@
         if (!payload || payload.playerName !== playerNameSpan.textContent) return;
         lastQuestions = payload.questions || [];
         lastGame = payload.game || null;
+        // Hide team UI and focus on the question view for the approved player
+        if (welcomeHeader) welcomeHeader.style.display = 'none';
+        createTeamControls.style.display = 'none';
+        existingTeams.style.display = 'none';
+        currentTeamSection.style.display = 'none';
+        leaveBtn.style.display = 'none';
         renderQuestion();
+        // ensure hints counter/button are accurate for this player right away
+        socket.emit('player_get_hints_state');
       });
 
       submitAnswerBtn.onclick = () => {
@@ -329,6 +355,7 @@
       // Hints: request and update
       getHintBtn.onclick = () => {
         socket.emit('request_hint');
+        getHintBtn.disabled = true;
       };
 
       socket.on('hints_state', (stateHints) => {
@@ -347,10 +374,12 @@
           if (q) {
             if (lastHints.hintedQuestionIds && lastHints.hintedQuestionIds.includes(q.id)) {
               qHintEl.style.display = 'block';
-              qHintEl.textContent = `Hint: ${q.hint || ''}`;
+              qHintEl.textContent = `Жокер: ${q.hint || ''}`;
+              getHintBtn.disabled = true;
             } else {
               qHintEl.style.display = 'none';
               qHintEl.textContent = '';
+              getHintBtn.disabled = left <= 0 || !isCreator;
             }
           }
         }
@@ -368,6 +397,7 @@
         if (q && payload.questionId === q.id) {
           qHintEl.style.display = 'block';
           qHintEl.textContent = `Hint: ${payload.hint || ''}`;
+          getHintBtn.disabled = true;
         }
       });
 
@@ -384,7 +414,7 @@
       });
 
       socket.on("game_started", () => {
-        alert("Game started!");
+        alert("Играта започна!");
         if (welcomeHeader) welcomeHeader.style.display = 'none';
         leaveBtn.style.display = 'none';
         createTeamControls.style.display = 'none';
@@ -396,7 +426,7 @@
         location.reload();
       });
       socket.on("game_ended", () => {
-        alert("Game ended!");
+        alert("Играта приключи!");
         lastGame = { started: 0, ended: 1 };
         // on end, re-show base UI; team list logic will toggle specifics
         if (welcomeHeader) welcomeHeader.style.display = '';
@@ -407,7 +437,7 @@
         location.reload();
         renderQuestion();
       });
-      socket.on("game_frozen", () => alert("Teams are locked. You must wait until the game ends."));
+      socket.on("game_frozen", () => alert("Отборите са заключени. Изчакайте края на играта."));
 
       try {
         const saved = localStorage.getItem("playerName");
@@ -440,9 +470,9 @@
         joinPending.style.display = 'none';
         pendingJoinFor = null;
         if (!accepted) {
-          if (reason === 'team_full') alert('Team full');
-          else if (reason === 'rejected') alert('Join request rejected');
-          else if (reason === 'stale') alert('Join request no longer valid');
+          if (reason === 'team_full') alert('Отборът е пълен');
+          else if (reason === 'rejected') alert('Заявката е отхвърлена');
+          else if (reason === 'stale') alert('Заявката вече не е валидна');
           // else if (reason === 'already_in_team') alert('You are already in a team');
         }
       });

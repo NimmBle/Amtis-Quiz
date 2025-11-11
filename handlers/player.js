@@ -151,13 +151,7 @@ module.exports = function registerPlayerHandlers(io, db, socket, utils) {
       if (wasCaptain) {
         db.prepare("UPDATE teams SET creator_name = ? WHERE id = ?").run(playerName, teamId);
       }
-      const count = db
-        .prepare("SELECT COUNT(*) as c FROM players WHERE team_id = ?")
-        .get(teamId);
-      if (count && count.c === 0) {
-        db.prepare("DELETE FROM answers WHERE team_id = ?").run(teamId);
-        db.prepare("DELETE FROM teams WHERE id = ?").run(teamId);
-      }
+      // Do not delete team or its answers when last player leaves; teams persist
     }
     io.emit("teams_update", utils.getAllTeams(db));
     utils.sendAdminState(io, db);
