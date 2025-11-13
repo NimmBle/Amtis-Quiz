@@ -268,4 +268,33 @@ module.exports = function registerAdminHandlers(io, db, socket, utils) {
       // minimal error handling
     }
   });
+
+  socket.on("admin_delete_player", (playerName) => {
+    if (!socket.data.isAdmin) return;
+    if (!playerName) return;
+    const player = db
+      .prepare("SELECT name, team_id, is_creator FROM players WHERE name = ?")
+      .get(playerName);
+    if (!player) return;
+    const teamId = player.team_id;
+    db.prepare("DELETE FROM join_requests WHERE player_name = ?").run(playerName);
+    db.prepare("DELETE FROM players WHERE name = ?").run(playerName);
+    if (teamId) {
+      let captain = db
+        .prepare("SELECT name FROM players WHERE team_id = ? AND is_creator = 1 LIMIT 1")
+        .get(teamId);
+      if (!captain) {
+        const nextMember = db
+          .prepare("SELECT name FROM players WHERE team_id = ? LIMIT 1")
+          .get(teamId);
+        if (nextMember) {
+          db.prepare("UPDATE players SET is_creator = 1 WHERE name = ?").run(nextMember.name);
+          captain = nextMember;
+        }
+      }
+      db.prepare("UPDATE teams SET creator_name = ? WHERE id = ?").run(captain ? captain.name : null, teamId);
+    }
+    io.emit("teams_update", utils.getAllTeams(db));
+    utils.sendAdminState(io, db);
+  });
 };

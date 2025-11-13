@@ -1,7 +1,7 @@
 const sanitizeExternalId = (value) => {
   if (value == null) return null;
   const trimmed = value.toString().trim();
-  return /^\d{6}$/.test(trimmed) ? trimmed : null;
+  return /^(?:[5-9]|1[0-2])$/.test(trimmed) ? trimmed : null;
 };
 
 const splitAcceptableAnswers = (value) => {

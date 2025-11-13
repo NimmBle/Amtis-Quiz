@@ -69,6 +69,17 @@ const getGameState = (db) => db.prepare("SELECT * FROM game_state WHERE id = 1")
 const getUsedHints = (db) =>
   db.prepare("SELECT id, team_id, question_id, created_at FROM hints ORDER BY id ASC").all();
 
+const getAllPlayers = (db) =>
+  db
+    .prepare(
+      `SELECT p.id, p.name, p.external_id, p.team_id, p.is_creator,
+              t.name AS team_name
+       FROM players p
+       LEFT JOIN teams t ON p.team_id = t.id
+       ORDER BY LOWER(p.name)`
+    )
+    .all();
+
 const isGameStarted = (db) => {
   const s = getGameState(db);
   return !!(s && s.started);
@@ -96,6 +107,7 @@ const sendAdminState = (io, db, target) => {
     questions: getQuestions(db),
     answers: getAnswers(db),
     game: getGameState(db),
+    players: getAllPlayers(db),
     max_hints: getMaxHints(db),
     used_hints: getUsedHints(db)
   };
@@ -111,6 +123,7 @@ module.exports = {
   getQuestions,
   getQuestionsPublic,
   getAnswers,
+  getAllPlayers,
   getGameState,
   isGameStarted,
   getMaxHints,

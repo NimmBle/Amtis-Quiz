@@ -28,6 +28,22 @@
           </table>
         </div>
       </div>
+      <div id="playersPanel" class="mb-4">
+        <h3>Players</h3>
+        <div class="overflow-auto">
+          <table id="playersTable" class="min-600">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Grade</th>
+                <th>Team</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="playersTableBody"></tbody>
+          </table>
+        </div>
+      </div>
       <div class="row-start">
         <div id="questionsPanel" class="flex-2">
           <h3>Questions</h3>
@@ -68,7 +84,8 @@
       const maxHintsMsg = document.getElementById('maxHintsMsg');
       const addQBtn = document.getElementById('addQBtn');
       const questionsList = document.getElementById('questionsList');
-      let state = { teams: [], questions: [], answers: [], game: null, max_hints: 3, used_hints: [] };
+      const playersTableBody = document.getElementById('playersTableBody');
+      let state = { teams: [], players: [], questions: [], answers: [], game: null, max_hints: 3, used_hints: [] };
       const showAlert = (text, icon = 'info') => {
         Swal.fire({
           text,
@@ -280,9 +297,39 @@
           questionsList.appendChild(li);
         });
       }
+      function renderPlayers() {
+        if (!playersTableBody) return;
+        playersTableBody.innerHTML = '';
+        (state.players || []).forEach((p) => {
+          const tr = document.createElement('tr');
+          const tdName = document.createElement('td');
+          tdName.textContent = p.name;
+          tr.appendChild(tdName);
+          const tdGrade = document.createElement('td');
+          tdGrade.textContent = p.external_id || '';
+          tr.appendChild(tdGrade);
+          const tdTeam = document.createElement('td');
+          tdTeam.textContent = p.team_name || '';
+          tr.appendChild(tdTeam);
+          const tdActions = document.createElement('td');
+          const delBtn = document.createElement('button');
+          delBtn.className = 'btn btn--danger';
+          delBtn.textContent = 'Delete';
+          delBtn.onclick = () => {
+            if (confirm(`Delete player ${p.name}?`)) {
+              socket.emit('admin_delete_player', p.name);
+            }
+          };
+          tdActions.appendChild(delBtn);
+          tr.appendChild(tdActions);
+          playersTableBody.appendChild(tr);
+        });
+      }
+
       function renderAll() {
         renderGame();
         renderTeams();
+        renderPlayers();
         renderQuestions();
       }
       adminLoginBtn.onclick = () => {
@@ -314,6 +361,7 @@
       });
       socket.on('admin_state', (payload) => {
         state = payload;
+        if (!Array.isArray(state.players)) state.players = [];
         if (typeof state.max_hints === 'number' && !Number.isNaN(state.max_hints)) {
           maxHintsInput.value = String(state.max_hints);
           maxHintsMsg.textContent = '';
@@ -323,6 +371,7 @@
       socket.on('teams_update', (teams) => {
         state.teams = teams;
         renderTeams();
+        renderPlayers();
       });
             saveMaxHintsBtn.onclick = () => {
         const n = parseInt(maxHintsInput.value, 10);
