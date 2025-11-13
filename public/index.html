@@ -475,14 +475,34 @@
       });
       socket.on("game_ended", () => {
         alert("Играта приключи!");
+        const playerName = playerNameSpan.textContent;
+        const currentTeam = lastTeams.find(t => t.players.includes(playerName));
         lastGame = { started: 0, ended: 1 };
-        // on end, re-show base UI; team list logic will toggle specifics
-        if (welcomeHeader) welcomeHeader.style.display = '';
         finishedNotice.style.display = 'none';
         gameSection.style.display = 'none';
-        createTeamControls.style.display = 'block';
-        existingTeams.style.display = 'block';
-        // location.reload();
+        if (currentTeam) {
+          if (welcomeHeader) welcomeHeader.style.display = '';
+          createTeamControls.style.display = 'none';
+          existingTeams.style.display = 'none';
+          currentTeamSection.style.display = 'block';
+          currentTeamNameSpan.textContent = currentTeam.name;
+          memberList.innerHTML = '';
+          currentTeam.players.forEach((p) => {
+            const li = document.createElement('li');
+            li.textContent = p + (currentTeam.captain && currentTeam.captain === p ? " (капитан)" : "");
+            memberList.appendChild(li);
+          });
+          leaveBtn.style.display = 'inline-block';
+          if (playerName === currentTeam.captain) {
+            socket.emit('captain_list_requests');
+          }
+        } else {
+          if (welcomeHeader) welcomeHeader.style.display = '';
+          createTeamControls.style.display = 'block';
+          existingTeams.style.display = 'block';
+          currentTeamSection.style.display = 'none';
+          leaveBtn.style.display = 'none';
+        }
         renderQuestion();
       });
       socket.on("game_frozen", () => alert("Отборите са заключени. Изчакайте края на играта."));
