@@ -105,6 +105,21 @@ th, td { border: 1px solid var(--border); padding: 8px 10px; text-align: left; }
 
 img { max-width: 100%; height: auto; }
 
+.img-loader {
+  width: 48px;
+  height: 48px;
+  border: 4px solid #e5e7eb;
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 12px auto;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 #qImageEl { 
   width: 100%;
 }
@@ -266,6 +281,7 @@ header {
     color: transparent;
     font-size: 26px;
     margin: 0 auto;
+    font-weight: 900;
 }
 
 .existing-teams {

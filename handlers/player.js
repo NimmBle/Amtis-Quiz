@@ -14,6 +14,10 @@ const splitAcceptableAnswers = (value) => {
 };
 
 module.exports = function registerPlayerHandlers(io, db, socket, utils) {
+  if (socket?.data?.__playerHandlersBound) {
+    return;
+  }
+  if (socket && socket.data) socket.data.__playerHandlersBound = true;
   socket.on("resume", (playerName) => {
     if (!playerName) return;
     const player = db

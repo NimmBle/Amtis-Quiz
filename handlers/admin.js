@@ -1,4 +1,8 @@
 module.exports = function registerAdminHandlers(io, db, socket, utils) {
+  if (socket?.data?.__adminHandlersBound) {
+    return;
+  }
+  if (socket && socket.data) socket.data.__adminHandlersBound = true;
   socket.on("admin_login", (code) => {
     try {
       const row = db.prepare("SELECT code FROM admin_config WHERE id = 1").get();

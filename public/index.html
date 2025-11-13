@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html>
   <head>
     <meta charset="utf-8" />
@@ -53,6 +53,7 @@
         <h3 id="gameSectionHeading">Загадка</h3>
         <div id="questionView">
           <img id="qImageEl" alt="question" style="display:none;" />
+          <div id="qImageLoader" class="img-loader" style="display:none;" aria-label="Зареждане..."></div>
           <p id="qTextEl"></p>
           <p id="qHintEl" style="display:none; color:#555;"></p>
         </div>
@@ -85,6 +86,7 @@
       const gameSection = document.getElementById("gameSection");
       const gameSectionHeading = document.getElementById("gameSectionHeading");
       const qImageEl = document.getElementById("qImageEl");
+      const qImageLoader = document.getElementById("qImageLoader");
       const qTextEl = document.getElementById("qTextEl");
       const qHintEl = document.getElementById("qHintEl");
       // const questionViewEl = document.getElementById("questionView");
@@ -185,13 +187,37 @@
           `;
           return;
         }
+        // While a question is active, ensure team UI is hidden and focus the question view
+        if (welcomeHeader) welcomeHeader.style.display = 'none';
+        createTeamControls.style.display = 'none';
+        existingTeams.style.display = 'none';
+        currentTeamSection.style.display = 'none';
+        leaveBtn.style.display = 'none';
+
         const colors = ['#0e1a2a', '#ff8900', '#0657a4', '#000', '#349a47', '#d71724', '#ff8900', '#0657a4','#349a47', '#000'];
         const color = colors[(pos - 1) % colors.length];
         submitAnswerBtn.style.backgroundColor = color;
         gameSectionHeading.style.color = color;
         gameSectionHeading.textContent = `Загадка ${pos}`;
-        qImageEl.style.display = q.image_url ? 'block' : 'none';
-        if (q.image_url) qImageEl.src = q.image_url;
+        // Handle image + loader
+        if (q.image_url) {
+          if (qImageLoader) qImageLoader.style.display = 'block';
+          qImageEl.style.display = 'none';
+          // Clear previous handlers, then attach
+          qImageEl.onload = () => {
+            if (qImageLoader) qImageLoader.style.display = 'none';
+            qImageEl.style.display = 'block';
+          };
+          qImageEl.onerror = () => {
+            if (qImageLoader) qImageLoader.style.display = 'none';
+            qImageEl.style.display = 'none';
+          };
+          qImageEl.src = q.image_url;
+        } else {
+          if (qImageLoader) qImageLoader.style.display = 'none';
+          qImageEl.style.display = 'none';
+          qImageEl.removeAttribute('src');
+        }
         qTextEl.textContent = q.text || '';
         console.log("Here, yes!");
         gameSection.style.display = 'block';
@@ -222,9 +248,14 @@
         // Refresh captain status on any team change
         socket.emit('player_get_info');
 
-        // If the game is in progress (or team already has a current question > 0),
+        const gameRunning = !!(lastGame && lastGame.started && !lastGame.ended);
+        const teamHasProgress = currentTeam && Number(currentTeam.current_question) > 0;
+        const awaitingState = !lastGame && teamHasProgress;
+        const shouldFocusQuestion = !!(currentTeam && (gameRunning || awaitingState));
+
+        // If the game is in progress (or we have not yet received state but the team is mid-quiz),
         // keep team UI hidden and focus on the question view
-        if ((lastGame && lastGame.started) || (currentTeam && Number(currentTeam.current_question) > 0)) {
+        if (shouldFocusQuestion) {
           if (welcomeHeader) welcomeHeader.style.display = 'none';
           createTeamControls.style.display = 'none';
           existingTeams.style.display = 'none';
@@ -304,12 +335,16 @@
       socket.on("questions_payload", (payload) => {
         lastQuestions = payload.questions || [];
         lastGame = payload.game || null;
-        // Hide team UI and focus on the question view when questions load
-        if (welcomeHeader) welcomeHeader.style.display = 'none';
-        createTeamControls.style.display = 'none';
-        existingTeams.style.display = 'none';
-        currentTeamSection.style.display = 'none';
-        leaveBtn.style.display = 'none';
+        const activeGame = lastGame && lastGame.started && !lastGame.ended;
+        const hasTeam = lastTeams.some(t => t.players.includes(playerNameSpan.textContent));
+        // Only hide team UI if the game is actually running for players inside a team
+        if (activeGame && hasTeam) {
+          if (welcomeHeader) welcomeHeader.style.display = 'none';
+          createTeamControls.style.display = 'none';
+          existingTeams.style.display = 'none';
+          currentTeamSection.style.display = 'none';
+          leaveBtn.style.display = 'none';
+        }
         renderQuestion();
         // ensure hints counter/button are accurate right after receiving questions
         socket.emit('player_get_hints_state');
@@ -320,12 +355,16 @@
         if (!payload || payload.playerName !== playerNameSpan.textContent) return;
         lastQuestions = payload.questions || [];
         lastGame = payload.game || null;
-        // Hide team UI and focus on the question view for the approved player
-        if (welcomeHeader) welcomeHeader.style.display = 'none';
-        createTeamControls.style.display = 'none';
-        existingTeams.style.display = 'none';
-        currentTeamSection.style.display = 'none';
-        leaveBtn.style.display = 'none';
+        const activeGameTargeted = lastGame && lastGame.started && !lastGame.ended;
+        const hasTeamTargeted = lastTeams.some(t => t.players.includes(playerNameSpan.textContent));
+        // Only hide team UI if the game is actually running for players inside a team
+        if (activeGameTargeted && hasTeamTargeted) {
+          if (welcomeHeader) welcomeHeader.style.display = 'none';
+          createTeamControls.style.display = 'none';
+          existingTeams.style.display = 'none';
+          currentTeamSection.style.display = 'none';
+          leaveBtn.style.display = 'none';
+        }
         renderQuestion();
         // ensure hints counter/button are accurate for this player right away
         socket.emit('player_get_hints_state');
@@ -415,15 +454,24 @@
 
       socket.on("game_started", () => {
         alert("Играта започна!");
-        if (welcomeHeader) welcomeHeader.style.display = 'none';
-        leaveBtn.style.display = 'none';
-        createTeamControls.style.display = 'none';
-        existingTeams.style.display = 'none';
-        currentTeamSection.style.display = 'none';
+        const playerName = playerNameSpan.textContent;
+        const currentTeam = lastTeams.find(t => t.players.includes(playerName));
+        if (currentTeam) {
+          if (welcomeHeader) welcomeHeader.style.display = 'none';
+          leaveBtn.style.display = 'none';
+          createTeamControls.style.display = 'none';
+          existingTeams.style.display = 'none';
+          currentTeamSection.style.display = 'none';
+        } else {
+          if (welcomeHeader) welcomeHeader.style.display = '';
+          leaveBtn.style.display = 'none';
+          createTeamControls.style.display = 'block';
+          existingTeams.style.display = 'block';
+          currentTeamSection.style.display = 'none';
+        }
         socket.emit('player_get_questions');
         socket.emit('player_get_hints_state');
         if (isCreator) socket.emit('captain_list_requests');
-        location.reload();
       });
       socket.on("game_ended", () => {
         alert("Играта приключи!");
@@ -434,7 +482,7 @@
         gameSection.style.display = 'none';
         createTeamControls.style.display = 'block';
         existingTeams.style.display = 'block';
-        location.reload();
+        // location.reload();
         renderQuestion();
       });
       socket.on("game_frozen", () => alert("Отборите са заключени. Изчакайте края на играта."));
