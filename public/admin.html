@@ -43,6 +43,7 @@
         </div>
       </div>
     </div>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="/socket.io/socket.io.js"></script>
     <script>
       const socket = io();
@@ -68,6 +69,14 @@
       const addQBtn = document.getElementById('addQBtn');
       const questionsList = document.getElementById('questionsList');
       let state = { teams: [], questions: [], answers: [], game: null, max_hints: 3, used_hints: [] };
+      const showAlert = (text, icon = 'info') => {
+        Swal.fire({
+          text,
+          icon,
+          confirmButtonText: 'Добре',
+          confirmButtonColor: '#0e1a2a'
+        });
+      };
 
       const parseAnswersInput = (value) => {
         const seen = new Set();
@@ -240,7 +249,7 @@
             const text = textInput.value.trim();
             const hint = hintInput.value.trim();
             const answers = parseAnswersInput(answersArea.value);
-            if (!hint || !answers.length) { alert('Hint and at least one answer are required'); return; }
+            if (!hint || !answers.length) { showAlert('Hint and at least one answer are required', 'warning'); return; }
             socket.emit('admin_update_question', { id: q.id, image_url, text, hint, answers });
             setEditing(false);
           };
@@ -290,8 +299,8 @@
         const text = qText.value.trim();
         const hint = qHint.value.trim();
         const answers = parseAnswersInput(qAnswers.value);
-        if (!hint) { alert('Hint is required'); return; }
-        if (!answers.length) { alert('At least one correct answer is required'); return; }
+        if (!hint) { showAlert('Hint is required', 'warning'); return; }
+        if (!answers.length) { showAlert('At least one correct answer is required', 'warning'); return; }
         socket.emit('admin_add_question', { image_url, text, hint, answers });
         qImage.value = '';
         qText.value = '';

@@ -203,7 +203,7 @@ module.exports = function registerPlayerHandlers(io, db, socket, utils) {
       socket.emit("answer_result", { correct: true });
       utils.sendAdminState(io, db);
     } else {
-      socket.emit("answer_result", { correct: false, message: "Wrong answer. Try again." });
+      socket.emit("answer_result", { correct: false, message: "Грешен отговор. Опитайте отново." });
     }
   });
 
