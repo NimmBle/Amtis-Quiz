@@ -4,7 +4,7 @@
 #
 
 app = 'amtis-quiz'
-primary_region = 'iad'
+primary_region = 'fra'
 
 [build]
 

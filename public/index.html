@@ -21,7 +21,7 @@
       <span class="register-heading">Време е за <span class="accent-word">мисия</span>!</span>
       <span>Влез, за да отключиш следващото ниво от нашия куест. Подготви се – логиката, наблюдателността и бързата мисъл ще бъдат твоите оръжия.</span>
       <input id="name" class="input" placeholder="Въведи името си" />
-      <input id="extId" class="input" placeholder="Въведи ID-то от баджа си" />
+      <input id="extId" class="input" placeholder="Въведи клас (5-12)" inputmode="numeric" maxlength="2" />
       <button id="joinBtn" class="btn btn--primary">Включи се</button>
     </div>
 
@@ -206,11 +206,11 @@
         const name = document.getElementById("name").value.trim();
         const extId = document.getElementById("extId").value.trim();
         if (!name || !extId) {
-          showAlert("Моля, въведете име и ID.", "warning");
+          showAlert("Моля, въведете име и клас.", "warning");
           return;
         }
-        if (!/^\d{6}$/.test(extId)) {
-          showAlert("ID трябва да е точно 6 цифри.", "warning");
+        if (!/^(?:[5-9]|1[0-2])$/.test(extId)) {
+          showAlert("Класът трябва да е цяло число между 5 и 12.", "warning");
           return;
         }
         try { localStorage.setItem("externalId", extId); } catch {}
@@ -247,7 +247,7 @@
 
       socket.on("name_taken", () => showAlert("Името е заето!", "error"));
       socket.on("invalid_external_id", () => {
-        showAlert("ID трябва да е точно 6 цифри.", "warning");
+        showAlert("Класът трябва да е цяло число между 5 и 12.", "warning");
         try { localStorage.removeItem("externalId"); } catch {}
       });
       socket.on("resume_failed", () => {
@@ -738,8 +738,6 @@
     </script>
   </body>
 </html>
-
-
 
 
 
