@@ -1,6 +1,14 @@
 const Database = require("better-sqlite3");
 const path = require("path");
-const dbPath = path.join(__dirname, "quiz.db");
+const fs = require("fs");
+
+const dbDir = process.env.DB_DIR || __dirname;
+try {
+  fs.mkdirSync(dbDir, { recursive: true });
+} catch {
+  // ignore mkdir errors; directory may already exist
+}
+const dbPath = path.join(dbDir, "quiz.db");
 const db = new Database(dbPath);
 
 db.exec(`
