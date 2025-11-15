@@ -583,7 +583,7 @@
         if (isCreator) socket.emit('captain_list_requests');
       });
       socket.on("game_ended", () => {
-        showAlert("Играта приключи!", "info");
+        showAlert("Играта приключи! Чакаме ви обратно на кръгето в Исмена за награди!", "info");
         const playerName = playerNameSpan.textContent;
         const currentTeam = lastTeams.find(t => t.players.includes(playerName));
         lastGame = { started: 0, ended: 1 };

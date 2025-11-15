@@ -1,6 +1,58 @@
+const formatIsoFromParts = (parts, offsetRaw) => {
+  const map = (type) => parts.find((p) => p.type === type)?.value || "00";
+  const year = map("year");
+  const month = map("month");
+  const day = map("day");
+  const hour = map("hour");
+  const minute = map("minute");
+  const second = map("second");
+  const offset = (offsetRaw || "GMT+02:00").replace("GMT", "");
+  return `${year}-${month}-${day}T${hour}:${minute}:${second}${offset}`;
+};
+
+const getBgIsoString = () => {
+  const now = new Date();
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Sofia",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+  const parts = formatter.formatToParts(now);
+  const offsetFormatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Europe/Sofia",
+    timeZoneName: "shortOffset",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+  const offsetParts = offsetFormatter.formatToParts(now);
+  const offsetRaw = offsetParts.find((p) => p.type === "timeZoneName")?.value || "GMT+02:00";
+  return formatIsoFromParts(parts, offsetRaw);
+};
+
+const recordTeamProgress = (db, teamId, questionPosition, timestamp) => {
+  if (!teamId || !questionPosition) return;
+  const recorded_at = timestamp || getBgIsoString();
+  db.prepare(
+    "INSERT INTO team_progress (team_id, question_position, recorded_at) VALUES (?, ?, ?)"
+  ).run(teamId, questionPosition, recorded_at);
+};
+
+const getTeamProgress = (db) =>
+  db
+    .prepare(
+      "SELECT team_id, question_position, recorded_at FROM team_progress ORDER BY recorded_at ASC"
+    )
+    .all();
+
 const getAllTeams = (db) => {
   const stmt = db.prepare(
-    `SELECT t.id, t.name, t.current_question,
+    `SELECT t.id, t.name, t.current_question, t.start_time, t.finished_at,
             (SELECT name FROM players cp WHERE cp.team_id = t.id AND cp.is_creator = 1 LIMIT 1) AS captain
       FROM teams t`
   );
@@ -16,6 +68,8 @@ const getAllTeams = (db) => {
       players_detail: members,
       current_question: t.current_question,
       captain: t.captain || null,
+      start_time: t.start_time || null,
+      finished_at: t.finished_at || null,
     };
   });
 };
@@ -109,7 +163,8 @@ const sendAdminState = (io, db, target) => {
     game: getGameState(db),
     players: getAllPlayers(db),
     max_hints: getMaxHints(db),
-    used_hints: getUsedHints(db)
+    used_hints: getUsedHints(db),
+    progress: getTeamProgress(db),
   };
   if (target && typeof target.emit === "function") {
     target.emit("admin_state", payload);
@@ -119,6 +174,8 @@ const sendAdminState = (io, db, target) => {
 };
 
 module.exports = {
+  getBgIsoString,
+  recordTeamProgress,
   getAllTeams,
   getQuestions,
   getQuestionsPublic,
@@ -128,5 +185,6 @@ module.exports = {
   isGameStarted,
   getMaxHints,
   getTeamHintsState,
+  getTeamProgress,
   sendAdminState,
 };

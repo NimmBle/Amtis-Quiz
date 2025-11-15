@@ -29,11 +29,17 @@ module.exports = function registerAdminHandlers(io, db, socket, utils) {
 
   socket.on("start_game", () => {
     if (!socket.data.isAdmin) return;
-    db.prepare("UPDATE game_state SET started = 1, ended = 0 WHERE id = 1").run();
+    const startTime = utils.getBgIsoString();
+    db.prepare(
+      "UPDATE game_state SET started = 1, ended = 0, first_finish_team_id = NULL, first_finish_team_name = NULL, first_finish_player = NULL, first_finish_at = NULL WHERE id = 1"
+    ).run();
     // reset previous hint and answer usage
     db.prepare("DELETE FROM hints").run();
     db.prepare("DELETE FROM answers").run();
-    db.prepare("UPDATE teams SET current_question = 1").run();
+    db.prepare("DELETE FROM team_progress").run();
+    db.prepare("UPDATE teams SET current_question = 1, start_time = ?, finished_at = NULL").run(startTime);
+    const teamIds = db.prepare("SELECT id FROM teams").all();
+    teamIds.forEach((team) => utils.recordTeamProgress(db, team.id, 1, startTime));
     io.emit("game_started");
     io.emit("teams_update", utils.getAllTeams(db));
     io.emit("questions_payload", {

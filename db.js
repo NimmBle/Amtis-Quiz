@@ -10,6 +10,7 @@ try {
 }
 const dbPath = path.join(dbDir, "quiz.db");
 const db = new Database(dbPath);
+db.pragma("foreign_keys = ON");
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS players (
@@ -23,7 +24,9 @@ CREATE TABLE IF NOT EXISTS teams (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT UNIQUE,
   current_question INTEGER DEFAULT 0,
-  creator_name TEXT
+  creator_name TEXT,
+  start_time TEXT,
+  finished_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS questions (
@@ -66,13 +69,25 @@ CREATE TABLE IF NOT EXISTS hints (
   UNIQUE(team_id, question_id)
 );
 
+CREATE TABLE IF NOT EXISTS team_progress (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  team_id INTEGER NOT NULL,
+  question_position INTEGER NOT NULL,
+  recorded_at TEXT NOT NULL,
+  FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS game_state (
   id INTEGER PRIMARY KEY CHECK (id = 1),
   started BOOLEAN DEFAULT 0,
-  ended BOOLEAN DEFAULT 0
+  ended BOOLEAN DEFAULT 0,
+  first_finish_team_id INTEGER,
+  first_finish_team_name TEXT,
+  first_finish_player TEXT,
+  first_finish_at TEXT
 );
 
-INSERT OR IGNORE INTO game_state (id, started, ended) VALUES (1, 0, 0);
+INSERT OR IGNORE INTO game_state (id, started, ended, first_finish_team_id, first_finish_team_name, first_finish_player, first_finish_at) VALUES (1, 0, 0, NULL, NULL, NULL, NULL);
 
 CREATE TABLE IF NOT EXISTS admin_config (
   id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -122,6 +137,14 @@ if (!hasCreatorName) {
       SELECT name FROM players WHERE team_id = teams.id AND is_creator = 1 LIMIT 1
     )
   `);
+}
+const hasStartTime = teamColumns.some(c => c.name === "start_time");
+if (!hasStartTime) {
+  db.exec(`ALTER TABLE teams ADD COLUMN start_time TEXT;`);
+}
+const hasFinishedAt = teamColumns.some(c => c.name === "finished_at");
+if (!hasFinishedAt) {
+  db.exec(`ALTER TABLE teams ADD COLUMN finished_at TEXT;`);
 }
 const columns = db.prepare("PRAGMA table_info(questions)").all();
 const hasPosition = columns.some(c => c.name === 'position');
@@ -179,6 +202,25 @@ if (!hasMaxHints) {
 }
 db.exec(`
   UPDATE admin_config SET max_hints = COALESCE(max_hints, 3) WHERE id = 1;
+`);
+
+const gsCols = db.prepare("PRAGMA table_info(game_state)").all();
+const ensureGameStateColumn = (name, sql) => {
+  if (!gsCols.some((c) => c.name === name)) {
+    db.exec(sql);
+  }
+};
+ensureGameStateColumn("first_finish_team_id", `ALTER TABLE game_state ADD COLUMN first_finish_team_id INTEGER;`);
+ensureGameStateColumn("first_finish_team_name", `ALTER TABLE game_state ADD COLUMN first_finish_team_name TEXT;`);
+ensureGameStateColumn("first_finish_player", `ALTER TABLE game_state ADD COLUMN first_finish_player TEXT;`);
+ensureGameStateColumn("first_finish_at", `ALTER TABLE game_state ADD COLUMN first_finish_at TEXT;`);
+db.exec(`
+  UPDATE game_state
+  SET first_finish_team_id = NULL,
+      first_finish_team_name = NULL,
+      first_finish_player = NULL,
+      first_finish_at = NULL
+  WHERE id = 1 AND first_finish_team_id IS NULL;
 `);
 
 module.exports = db;

@@ -44,6 +44,21 @@
           </table>
         </div>
       </div>
+      <div id="progressPanel" class="mb-4">
+        <h3>Team Progress</h3>
+        <div class="overflow-auto">
+          <table id="progressTable" class="min-600">
+            <thead>
+              <tr>
+                <th>Team</th>
+                <th>Question</th>
+                <th>Reached At</th>
+              </tr>
+            </thead>
+            <tbody id="progressTableBody"></tbody>
+          </table>
+        </div>
+      </div>
       <div class="row-start">
         <div id="questionsPanel" class="flex-2">
           <h3>Questions</h3>
@@ -85,7 +100,8 @@
       const addQBtn = document.getElementById('addQBtn');
       const questionsList = document.getElementById('questionsList');
       const playersTableBody = document.getElementById('playersTableBody');
-      let state = { teams: [], players: [], questions: [], answers: [], game: null, max_hints: 3, used_hints: [] };
+      const progressTableBody = document.getElementById('progressTableBody');
+      let state = { teams: [], players: [], questions: [], answers: [], game: null, max_hints: 3, used_hints: [], progress: [] };
       const showAlert = (text, icon = 'info') => {
         Swal.fire({
           text,
@@ -93,6 +109,38 @@
           confirmButtonText: 'Добре',
           confirmButtonColor: '#0e1a2a'
         });
+      };
+      const parseTimestamp = (value) => {
+        if (!value) return null;
+        const tryParse = (input) => {
+          const d = new Date(input);
+          return Number.isNaN(d.getTime()) ? null : d;
+        };
+        let date = tryParse(value);
+        if (date) return date;
+        const replaced = value.replace(' ', 'T');
+        date = tryParse(replaced);
+        if (date) return date;
+        date = tryParse(replaced + 'Z');
+        return date;
+      };
+      const formatBgTime = (value) => {
+        if (!value) return '';
+        const date = parseTimestamp(value);
+        if (!date) return value;
+        return date.toLocaleString('bg-BG', {
+          timeZone: 'Europe/Sofia',
+          hour12: false,
+        });
+      };
+      const formatDuration = (ms) => {
+        if (!Number.isFinite(ms) || ms < 0) return '';
+        const totalSeconds = Math.floor(ms / 1000);
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        const seconds = totalSeconds % 60;
+        const pad = (n) => String(n).padStart(2, '0');
+        return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
       };
 
       const parseAnswersInput = (value) => {
@@ -127,6 +175,15 @@
         const thPlayers = document.createElement('th');
         thPlayers.textContent = 'Players';
         headRow.appendChild(thPlayers);
+        const thStart = document.createElement('th');
+        thStart.textContent = 'Start Time';
+        headRow.appendChild(thStart);
+        const thLast = document.createElement('th');
+        thLast.textContent = 'Last Progress';
+        headRow.appendChild(thLast);
+        const thDuration = document.createElement('th');
+        thDuration.textContent = 'Elapsed';
+        headRow.appendChild(thDuration);
 
         state.questions.forEach((q, idx) => {
           const th = document.createElement('th');
@@ -153,6 +210,11 @@
           const current = hintsByTeam.get(h.team_id) || 0;
           hintsByTeam.set(h.team_id, current + 1);
         });
+        const progressByTeam = new Map();
+        (state.progress || []).forEach((entry) => {
+          if (!progressByTeam.has(entry.team_id)) progressByTeam.set(entry.team_id, []);
+          progressByTeam.get(entry.team_id).push(entry);
+        });
 
         teamsTableBody.innerHTML = '';
         state.teams.forEach((t) => {
@@ -170,6 +232,23 @@
             tdPlayers.textContent = (t.players || []).join(', ');
           }
           tr.appendChild(tdPlayers);
+          const startDate = parseTimestamp(t.start_time);
+          const startCell = document.createElement('td');
+          startCell.textContent = startDate ? formatBgTime(t.start_time) : '';
+          tr.appendChild(startCell);
+          const entries = progressByTeam.get(t.id) || [];
+          const lastEntry = entries.length ? entries[entries.length - 1] : null;
+          const lastCell = document.createElement('td');
+          lastCell.textContent = lastEntry ? formatBgTime(lastEntry.recorded_at) : '';
+          tr.appendChild(lastCell);
+          const durationCell = document.createElement('td');
+          const lastDate = lastEntry ? parseTimestamp(lastEntry.recorded_at) : null;
+          if (startDate && lastDate) {
+            durationCell.textContent = formatDuration(lastDate - startDate);
+          } else {
+            durationCell.textContent = '';
+          }
+          tr.appendChild(durationCell);
 
           state.questions.forEach((q) => {
             const td = document.createElement('td');
@@ -326,10 +405,35 @@
         });
       }
 
+      function renderProgress() {
+        if (!progressTableBody) return;
+        progressTableBody.innerHTML = '';
+        const teamMap = new Map(state.teams.map((t) => [t.id, t.name]));
+        (state.progress || []).forEach((entry) => {
+          const tr = document.createElement('tr');
+          const tdTeam = document.createElement('td');
+          tdTeam.textContent = teamMap.get(entry.team_id) || entry.team_id;
+          tr.appendChild(tdTeam);
+          const tdQuestion = document.createElement('td');
+          const maxQuestions = state.questions.length;
+          if (entry.question_position > maxQuestions) {
+            tdQuestion.textContent = 'Finished';
+          } else {
+            tdQuestion.textContent = `Q${entry.question_position}`;
+          }
+          tr.appendChild(tdQuestion);
+          const tdTime = document.createElement('td');
+          tdTime.textContent = formatBgTime(entry.recorded_at);
+          tr.appendChild(tdTime);
+          progressTableBody.appendChild(tr);
+        });
+      }
+
       function renderAll() {
         renderGame();
         renderTeams();
         renderPlayers();
+        renderProgress();
         renderQuestions();
       }
       adminLoginBtn.onclick = () => {
@@ -362,6 +466,7 @@
       socket.on('admin_state', (payload) => {
         state = payload;
         if (!Array.isArray(state.players)) state.players = [];
+        if (!Array.isArray(state.progress)) state.progress = [];
         if (typeof state.max_hints === 'number' && !Number.isNaN(state.max_hints)) {
           maxHintsInput.value = String(state.max_hints);
           maxHintsMsg.textContent = '';

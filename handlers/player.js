@@ -73,9 +73,15 @@ module.exports = function registerPlayerHandlers(io, db, socket, utils) {
         .prepare("INSERT INTO teams (name) VALUES (?)")
         .run(teamName);
       const teamId = result.lastInsertRowid;
-      db.prepare("UPDATE teams SET creator_name = ? WHERE id = ?").run(playerName, teamId);
-      if (gameStarted) {
-        db.prepare("UPDATE teams SET current_question = 1 WHERE id = ?").run(teamId);
+      const startTime = gameStarted ? utils.getBgIsoString() : null;
+      db.prepare("UPDATE teams SET creator_name = ?, current_question = ?, start_time = ?, finished_at = NULL WHERE id = ?").run(
+        playerName,
+        gameStarted ? 1 : 0,
+        startTime,
+        teamId
+      );
+      if (gameStarted && startTime) {
+        utils.recordTeamProgress(db, teamId, 1, startTime);
       }
       db.prepare(
         "UPDATE players SET team_id = ?, is_creator = 1 WHERE name = ?"
@@ -199,6 +205,41 @@ module.exports = function registerPlayerHandlers(io, db, socket, utils) {
       db.prepare(
         "UPDATE teams SET current_question = current_question + 1 WHERE id = ?"
       ).run(team.id);
+      const updatedTeam = db
+        .prepare("SELECT current_question FROM teams WHERE id = ?")
+        .get(team.id);
+      const totalQuestionsRow = db
+        .prepare("SELECT COUNT(*) as c FROM questions")
+        .get();
+      const timestamp = utils.getBgIsoString();
+      if (updatedTeam && totalQuestionsRow) {
+        const nextPos = Number(updatedTeam.current_question);
+        const totalQuestions = Number(totalQuestionsRow.c);
+        if (nextPos <= totalQuestions) {
+          utils.recordTeamProgress(db, team.id, nextPos, timestamp);
+        } else {
+          db.prepare("UPDATE teams SET finished_at = COALESCE(finished_at, ?) WHERE id = ?").run(timestamp, team.id);
+          utils.recordTeamProgress(db, team.id, totalQuestions + 1, timestamp);
+          const gs = db
+            .prepare("SELECT first_finish_team_id FROM game_state WHERE id = 1")
+            .get();
+          if (!gs || gs.first_finish_team_id == null) {
+            db.prepare(
+              `UPDATE game_state
+               SET first_finish_team_id = ?,
+                   first_finish_team_name = ?,
+                   first_finish_player = ?,
+                   first_finish_at = ?
+               WHERE id = 1`
+            ).run(team.id, team.name, playerName, timestamp);
+            io.to("admins").emit("first_finish_notified", {
+              teamId: team.id,
+              teamName: team.name,
+              playerName,
+            });
+          }
+        }
+      }
       io.emit("teams_update", utils.getAllTeams(db));
       socket.emit("answer_result", { correct: true });
       utils.sendAdminState(io, db);
@@ -277,6 +318,7 @@ module.exports = function registerPlayerHandlers(io, db, socket, utils) {
       .prepare("SELECT is_creator FROM players WHERE name = ?")
       .get(playerName);
     socket.emit("player_info", { is_creator: !!(p && p.is_creator) });
+  });
 
   // ---------- Join requests (captain approval) ----------
 
